@@ -1,0 +1,17 @@
+{
+  "count": 2,
+  "value": [
+    {
+      "id": 11,
+      "name": "sample-pipeline",
+      "folder": "\\",
+      "url": "https://dev.azure.com/<org>/<project>/_apis/pipelines/11"
+    },
+    {
+      "id": 12,
+      "name": "sample-pipeline-2",
+      "folder": "\\",
+      "url": "https://dev.azure.com/<org>/<project>/_apis/pipelines/12"
+    }
+  ]
+}

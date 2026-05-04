@@ -1,0 +1,78 @@
+{
+  "id": "timeline-101",
+  "changeId": 3,
+  "lastChangedOn": "2026-04-29T10:05:00Z",
+  "records": [
+    {
+      "id": "stage-1",
+      "parentId": null,
+      "type": "Stage",
+      "name": "Build",
+      "result": "failed",
+      "state": "completed"
+    },
+    {
+      "id": "job-1",
+      "parentId": "stage-1",
+      "type": "Job",
+      "name": "Compile",
+      "result": "failed",
+      "state": "completed",
+      "log": {
+        "id": 1
+      }
+    },
+    {
+      "id": "task-1",
+      "parentId": "job-1",
+      "type": "Task",
+      "name": "Compile Sources",
+      "result": "failed",
+      "state": "completed",
+      "issues": [
+        {
+          "type": "warning",
+          "message": "A sample warning from mock data"
+        }
+      ],
+      "log": {
+        "id": 2
+      }
+    }
+  ],
+  "value": [
+    {
+      "id": "stage-1",
+      "type": "Stage",
+      "name": "Build",
+      "result": "failed",
+      "state": "completed"
+    },
+    {
+      "id": "job-1",
+      "type": "Job",
+      "name": "Compile",
+      "result": "failed",
+      "state": "completed",
+      "log": {
+        "id": 1
+      }
+    },
+    {
+      "id": "task-1",
+      "type": "Task",
+      "name": "Compile Sources",
+      "result": "failed",
+      "state": "completed",
+      "issues": [
+        {
+          "type": "warning",
+          "message": "A sample warning from mock data"
+        }
+      ],
+      "log": {
+        "id": 2
+      }
+    }
+  ]
+}

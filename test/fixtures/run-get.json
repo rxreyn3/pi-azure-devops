@@ -1,0 +1,12 @@
+{
+  "id": 9001,
+  "name": "sample-run",
+  "state": "completed",
+  "result": "failed",
+  "createdDate": "2026-04-29T10:00:00Z",
+  "finishedDate": "2026-04-29T10:05:00Z",
+  "pipeline": {
+    "id": 11,
+    "name": "sample-pipeline"
+  }
+}

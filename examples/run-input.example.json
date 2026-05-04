@@ -1,0 +1,15 @@
+{
+  "profile": "example",
+  "pipelineRef": {
+    "kind": "pipeline",
+    "pipelineId": "<pipeline-id>"
+  },
+  "refName": "<refs/heads/your-branch>",
+  "variables": {
+    "<var-name>": "<value>"
+  },
+  "templateParameters": {
+    "<param-name>": "<value>"
+  },
+  "resources": {}
+}

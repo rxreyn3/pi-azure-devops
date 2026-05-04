@@ -1,0 +1,16 @@
+{
+  "defaultProfile": "example",
+  "profiles": {
+    "example": {
+      "organization": "<your-org>",
+      "project": "<your-project>",
+      "apiVersion": "7.1",
+      "pipelines": {
+        "<pipeline-alias>": {
+          "pipelineId": "<pipeline-id>",
+          "definitionId": "<optional-build-definition-id>"
+        }
+      }
+    }
+  }
+}

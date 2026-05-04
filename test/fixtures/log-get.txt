@@ -1,0 +1,5 @@
+[section]Starting: Compile
+warning TS6133: 'unusedVar' is declared but its value is never read.
+error TS2304: Cannot find name 'MissingType'.
+[error]Build failed with exit code 1
+[section]Finishing: Compile

@@ -1,0 +1,17 @@
+{
+  "count": 2,
+  "value": [
+    {
+      "id": 1,
+      "type": "Container",
+      "lineCount": 42,
+      "createdOn": "2026-04-29T10:01:00Z"
+    },
+    {
+      "id": 2,
+      "type": "Container",
+      "lineCount": 18,
+      "createdOn": "2026-04-29T10:02:00Z"
+    }
+  ]
+}

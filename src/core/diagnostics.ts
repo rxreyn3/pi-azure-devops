@@ -1,0 +1,255 @@
+import { redactSensitiveText } from "./redact.js";
+import {
+  findTimelineRecordById,
+  selectLogId,
+  summarizeTimelineRecords,
+  type AzureDevOpsClient,
+} from "./client.js";
+import type {
+  ArtifactSummary,
+  BuildSummary,
+  LogSummary,
+  SelectedLogInfo,
+  TimelineRecord,
+  TimelineSummary,
+} from "./models.js";
+
+const DEFAULT_MAX_BYTES = 8_000;
+const MAX_MAX_BYTES = 100_000;
+const DEFAULT_CONTEXT_LINES = 2;
+const DEFAULT_MAX_EXCERPTS = 5;
+
+const LOG_MARKERS: Array<{ marker: string; priority: number; test: RegExp }> = [
+  { marker: "error", priority: 3, test: /\berror\b/i },
+  { marker: "exception", priority: 3, test: /\bexception\b/i },
+  { marker: "failed", priority: 3, test: /\bfailed?\b/i },
+  { marker: "warning", priority: 1, test: /\bwarn(?:ing)?\b/i },
+];
+
+export interface BuildFailureDiagnosticsInput {
+  buildId: number;
+  jobId?: string;
+  taskId?: string;
+  logId?: number;
+  maxBytes?: number;
+}
+
+export interface TimelineRecordEvidence {
+  id: string;
+  parentId?: string;
+  type?: string;
+  name?: string;
+  result?: string;
+  state?: string;
+  logId?: number;
+  issueMessages: string[];
+}
+
+export interface LogExcerpt {
+  marker: string;
+  lineNumber: number;
+  startLine: number;
+  endLine: number;
+  text: string;
+}
+
+export interface BuildFailureDiagnosticsBundle {
+  buildId: number;
+  build?: BuildSummary;
+  timelineSummary: TimelineSummary;
+  failedRecords: TimelineRecordEvidence[];
+  canceledRecords: TimelineRecordEvidence[];
+  matchedJobRecord?: TimelineRecordEvidence;
+  matchedTaskRecord?: TimelineRecordEvidence;
+  issueMessages: string[];
+  logs: {
+    available: LogSummary[];
+    selected: SelectedLogInfo;
+    selectedLog?: LogSummary;
+    maxBytesApplied: number;
+    content?: string;
+    excerpts: LogExcerpt[];
+  };
+  artifacts: ArtifactSummary[];
+  summary: string;
+}
+
+function clampInteger(value: number | undefined, min: number, max: number, fallback: number): number {
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(value)));
+}
+
+function recordIssueMessages(record: TimelineRecord): string[] {
+  return record.issues
+    .map((issue) => issue.message?.trim())
+    .filter((message): message is string => Boolean(message));
+}
+
+function toTimelineEvidence(record: TimelineRecord): TimelineRecordEvidence {
+  return {
+    id: record.id,
+    ...(record.parentId !== undefined ? { parentId: record.parentId } : {}),
+    ...(record.type !== undefined ? { type: record.type } : {}),
+    ...(record.name !== undefined ? { name: record.name } : {}),
+    ...(record.result !== undefined ? { result: record.result } : {}),
+    ...(record.state !== undefined ? { state: record.state } : {}),
+    ...(record.logId !== undefined ? { logId: record.logId } : {}),
+    issueMessages: recordIssueMessages(record),
+  };
+}
+
+function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function detectMarker(line: string): { marker: string; priority: number } | undefined {
+  for (const candidate of LOG_MARKERS) {
+    if (candidate.test.test(line)) {
+      return { marker: candidate.marker, priority: candidate.priority };
+    }
+  }
+  return undefined;
+}
+
+export function extractLogExcerpts(
+  logContent: string,
+  options: { contextLines?: number; maxExcerpts?: number } = {},
+): LogExcerpt[] {
+  const contextLines = clampInteger(options.contextLines, 0, 10, DEFAULT_CONTEXT_LINES);
+  const maxExcerpts = clampInteger(options.maxExcerpts, 1, 20, DEFAULT_MAX_EXCERPTS);
+
+  const normalized = normalizeLineEndings(logContent);
+  const lines = normalized.split("\n");
+
+  const excerpts: LogExcerpt[] = [];
+  let lastCapturedEnd = -1;
+  let lastCapturedPriority = 0;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const detected = detectMarker(line);
+    if (!detected) continue;
+    if (excerpts.length >= maxExcerpts) break;
+
+    const start = Math.max(0, index - contextLines);
+    const end = Math.min(lines.length - 1, index + contextLines);
+
+    if (start <= lastCapturedEnd && detected.priority <= lastCapturedPriority) {
+      continue;
+    }
+
+    excerpts.push({
+      marker: detected.marker,
+      lineNumber: index + 1,
+      startLine: start + 1,
+      endLine: end + 1,
+      text: lines.slice(start, end + 1).join("\n").trimEnd(),
+    });
+
+    lastCapturedEnd = Math.max(lastCapturedEnd, end);
+    lastCapturedPriority = detected.priority;
+  }
+
+  return excerpts;
+}
+
+function summarizeRecord(record: TimelineRecordEvidence): string {
+  const type = record.type ?? "Record";
+  const name = record.name ?? record.id;
+  const result = record.result ? ` (${record.result})` : "";
+  return `${type}: ${name}${result}`;
+}
+
+function buildHumanSummary(bundle: Omit<BuildFailureDiagnosticsBundle, "summary">): string {
+  const statusText = [bundle.build?.status, bundle.build?.result].filter(Boolean).join("/") || "unknown";
+  const failedTop = bundle.failedRecords[0] ? summarizeRecord(bundle.failedRecords[0]) : "none";
+  const selectedLog = bundle.logs.selected.resolvedLogId
+    ? `log ${bundle.logs.selected.resolvedLogId} (${bundle.logs.selected.resolvedLogSource ?? "unknown source"})`
+    : "none";
+
+  return [
+    `Build ${bundle.buildId}: ${statusText}`,
+    `Timeline failures: ${bundle.timelineSummary.failedRecords}, warnings: ${bundle.timelineSummary.warningCount}, problems: ${bundle.timelineSummary.problemCount}`,
+    `Primary failed record: ${failedTop}`,
+    `Selected log: ${selectedLog}`,
+    `Log excerpts: ${bundle.logs.excerpts.length}`,
+    `Artifacts: ${bundle.artifacts.length}`,
+  ].join(" | ");
+}
+
+export async function collectBuildFailureDiagnostics(
+  client: AzureDevOpsClient,
+  input: BuildFailureDiagnosticsInput,
+): Promise<BuildFailureDiagnosticsBundle> {
+  const maxBytesApplied = clampInteger(input.maxBytes, 1, MAX_MAX_BYTES, DEFAULT_MAX_BYTES);
+
+  const [build, timelineRecords, logs, artifacts] = await Promise.all([
+    client.getBuild(input.buildId),
+    client.getTimeline(input.buildId),
+    client.listLogs(input.buildId),
+    client.listArtifacts(input.buildId),
+  ]);
+
+  const matchedJob = findTimelineRecordById(timelineRecords, input.jobId);
+  const matchedTask = findTimelineRecordById(timelineRecords, input.taskId);
+
+  const selected = selectLogId({
+    taskRecord: matchedTask,
+    jobRecord: matchedJob,
+    explicitLogId: input.logId,
+    logs,
+  });
+
+  const selectedLog = selected.logId ? logs.find((entry) => entry.id === selected.logId) : undefined;
+  const content = selected.logId ? await client.getLog(input.buildId, selected.logId, maxBytesApplied) : undefined;
+  const excerpts = content ? extractLogExcerpts(content) : [];
+
+  const failedRecords = timelineRecords
+    .filter((record) => record.result?.toLowerCase() === "failed")
+    .map(toTimelineEvidence);
+
+  const canceledRecords = timelineRecords
+    .filter((record) => record.result?.toLowerCase() === "canceled")
+    .map(toTimelineEvidence);
+
+  const issueMessages = timelineRecords
+    .flatMap((record) => recordIssueMessages(record))
+    .filter((message, index, all) => all.findIndex((candidate) => candidate === message) === index);
+
+  const selectedDetails: SelectedLogInfo = {
+    ...(matchedJob?.id ? { matchedJobRecordId: matchedJob.id } : {}),
+    ...(matchedTask?.id ? { matchedTaskRecordId: matchedTask.id } : {}),
+    ...(selected.logId !== undefined ? { resolvedLogId: selected.logId } : {}),
+    ...(selected.source ? { resolvedLogSource: selected.source } : {}),
+  };
+
+  const bundleWithoutSummary: Omit<BuildFailureDiagnosticsBundle, "summary"> = {
+    buildId: input.buildId,
+    ...(build ? { build } : {}),
+    timelineSummary: summarizeTimelineRecords(timelineRecords),
+    failedRecords,
+    canceledRecords,
+    ...(matchedJob ? { matchedJobRecord: toTimelineEvidence(matchedJob) } : {}),
+    ...(matchedTask ? { matchedTaskRecord: toTimelineEvidence(matchedTask) } : {}),
+    issueMessages,
+    logs: {
+      available: logs,
+      selected: selectedDetails,
+      ...(selectedLog ? { selectedLog } : {}),
+      maxBytesApplied,
+      ...(content !== undefined ? { content } : {}),
+      excerpts,
+    },
+    artifacts,
+  };
+
+  return {
+    ...bundleWithoutSummary,
+    summary: buildHumanSummary(bundleWithoutSummary),
+  };
+}
+
+export function redactDiagnosticsBundle<T>(bundle: T, additionalSensitiveValues: string[] = []): T {
+  const redacted = redactSensitiveText(JSON.stringify(bundle), additionalSensitiveValues);
+  return JSON.parse(redacted) as T;
+}

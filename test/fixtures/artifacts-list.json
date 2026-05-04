@@ -1,0 +1,21 @@
+{
+  "count": 2,
+  "value": [
+    {
+      "id": 1,
+      "name": "drop",
+      "resource": {
+        "type": "Container",
+        "downloadUrl": "https://example.invalid/artifact/drop?sig=mock-signature-1"
+      }
+    },
+    {
+      "id": 2,
+      "name": "logs",
+      "resource": {
+        "type": "FilePath",
+        "downloadUrl": "https://example.invalid/artifact/logs?sig=mock-signature-2"
+      }
+    }
+  ]
+}

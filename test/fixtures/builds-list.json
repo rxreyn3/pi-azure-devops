@@ -1,0 +1,23 @@
+{
+  "count": 2,
+  "value": [
+    {
+      "id": 101,
+      "buildNumber": "20260429.1",
+      "status": "completed",
+      "result": "failed",
+      "definition": { "id": 301, "name": "sample-definition" },
+      "queueTime": "2026-04-29T10:00:00Z",
+      "finishTime": "2026-04-29T10:05:00Z"
+    },
+    {
+      "id": 100,
+      "buildNumber": "20260429.0",
+      "status": "completed",
+      "result": "succeeded",
+      "definition": { "id": 301, "name": "sample-definition" },
+      "queueTime": "2026-04-29T09:00:00Z",
+      "finishTime": "2026-04-29T09:03:00Z"
+    }
+  ]
+}

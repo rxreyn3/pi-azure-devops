@@ -1,0 +1,46 @@
+{
+  "name": "pi-azure-devops",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generic REST-first Azure DevOps package skeleton for Pi",
+  "type": "module",
+  "bin": {
+    "pi-ado": "dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "spike:rest": "tsx spikes/ado-rest-spike.ts"
+  },
+  "pi": {
+    "extensions": [
+      "./dist/extension/index.js"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./prompts/ado-doctor.md",
+      "./prompts/ado-status.md",
+      "./prompts/ado-logs.md",
+      "./prompts/ado-artifacts.md",
+      "./prompts/ado-diagnose.md"
+    ]
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": ">=0.70.0 <1"
+  },
+  "dependencies": {
+    "typebox": "^1.1.24"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.70.6",
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
