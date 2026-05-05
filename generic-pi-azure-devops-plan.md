@@ -8,26 +8,37 @@ This document is planning only. It does not authorize source, prompt, docs,
 package manifest, or test changes. Implementation of any phase below requires
 an explicit follow-up session.
 
-## 1. Current state (delivered through Phase 6A)
+## 1. Current state (delivered through Phase 7B)
 
 `pi-azure-devops` is a generic, REST-first Azure DevOps integration package
 for Pi. It is not a repo-specific ShotGrid helper.
 
-Delivered scope is read-only:
+Delivered scope:
 
 - Core modules under `src/core/`:
   - `config.ts`, `auth.ts`, `endpoints.ts`, `rest.ts`, `client.ts`,
     `models.ts`, `redact.ts`, `parsing.ts`, `scope.ts`, `mock.ts`,
-    `diagnostics.ts`.
-  - `rest.ts` is GET-only (`getJson`, `getText`) with bounded text retrieval.
-    No POST/PATCH/download transport exists yet.
-  - `client.ts` resolves timeline records by GUID/ID only via
-    `findTimelineRecordById`. No display-name lookup.
-  - `resolveBuildLogSelection` precedence today: task log → job log →
-    explicit log id → first listed log.
-  - `diagnostics.ts` uses the same ID-only timeline lookup for matched
-    job/task records.
-- CLI `pi-ado` commands: `doctor`, `status`, `logs`, `diagnose`, `artifacts`.
+    `diagnostics.ts`, `artifact-download.ts`.
+  - `rest.ts` exposes GET-only JSON/text plus stream-bounded `getBinary`
+    (default 100 MiB, hard cap 500 MiB; `auth: "azureDevOps" | "none"`
+    so signed-content URLs receive no Authorization header). No
+    POST/PATCH transport exists yet.
+  - `client.ts` resolves timeline records by GUID/ID and by display name
+    (`stageName` / `jobName` / `taskName`) with tiered match (exact,
+    case-insensitive exact, substring) returning structured
+    matched / noMatch / ambiguous / notRequested results.
+    `findTimelineRecordById` is preserved for back-compat.
+  - `resolveBuildLogSelection` precedence preserved: task log → job log →
+    explicit log id → first listed log (only when no selector supplied).
+  - `diagnostics.ts` uses the shared name/id resolver instead of duplicating
+    ID-only lookup logic.
+  - `artifact-download.ts` provides preview-first artifact download with
+    Zip Slip protection, lstat-based per-segment symlink containment,
+    same-path file/dir collision rejection, degenerate-entry rejection,
+    and overwrite preflight.
+- CLI `pi-ado` commands: read-only `doctor`, `status`, `logs`, `diagnose`,
+  `artifacts`, plus local-write `artifacts download` (preview unless
+  `--confirm`).
 - Read-only extension tools:
   - `azure_devops_doctor`
   - `azure_devops_get_status`
@@ -36,22 +47,22 @@ Delivered scope is read-only:
   - `azure_devops_list_artifacts`
   - `azure_devops_list_pipelines`
   - `azure_devops_list_builds`
+- Local-write extension tool (preview-first, gated on `confirm: true`):
+  - `azure_devops_download_artifact`
+- Tool registration partition: `READ_ONLY_AZURE_DEVOPS_TOOLS` unchanged;
+  `LOCAL_WRITE_AZURE_DEVOPS_TOOLS = [azure_devops_download_artifact]`.
 - Skill operating manual: `skills/azure-devops/SKILL.md`.
 - Read-only prompt templates: `/ado-doctor`, `/ado-status`, `/ado-logs`,
-  `/ado-artifacts`, `/ado-diagnose`.
-- CLI and extension schemas currently expose `jobId` / `taskId` only. They do
-  not accept `stageName` / `jobName` / `taskName`.
-- Docs and prompts intentionally state that artifact download/write/extract
-  and remote mutation are not implemented.
-- Tests explicitly assert mutation tool names are absent from the read-only
-  extension tool set.
+  `/ado-artifacts`, `/ado-diagnose`. Local-write prompt template:
+  `/ado-artifacts` documents the download flow.
+- CLI and extension schemas accept both ID selectors (`stageId`, `jobId`,
+  `taskId`) and name selectors (`stageName`, `jobName`, `taskName`).
+- Docs and prompts state that remote mutation is not implemented.
+- Tests assert the read-only / local-write tool partition and that
+  remote-mutation tool names remain absent.
 
 ## 2. Known remaining work
 
-- Timeline record lookup by human-readable display names (`stageName`,
-  `jobName`, `taskName`) in addition to GUID/ID selectors.
-- Local artifact download/write/extract flow with preview and explicit
-  confirmation.
 - Remote mutation flow (`preview`, `queue`, `cancel`, `rerun`) with preview,
   explicit confirmation, and fail-closed non-interactive behavior.
 - Future mutating prompt templates (`/ado-run`, `/ado-cancel`, `/ado-rerun`)
@@ -61,9 +72,9 @@ Delivered scope is read-only:
 
 User-selected order:
 
-1. Finish read-only UX (display-name selectors).
-2. Local artifact download / write / extract.
-3. Remote mutation with fail-closed gates.
+1. Finish read-only UX (display-name selectors). [delivered Phase 7A]
+2. Local artifact download / write / extract. [delivered Phase 7B]
+3. Remote mutation with fail-closed gates. [next: Phase 8]
 
 Rationale: surface-area and blast radius grow monotonically. Read-only name
 lookup adds zero side effects, local download adds filesystem writes only,
