@@ -4,16 +4,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  buildSelectedLogInfo,
   collectBuildFailureDiagnostics,
   createAzureDevOpsClient,
   createFixtureFetch,
   createReadOnlyRestClient,
+  downloadArtifact,
   getAuthSensitiveValues,
   redactDiagnosticsBundle,
   redactSensitiveText,
   resolveAzureDevOpsConfig,
   resolveScope,
+  resolveTimelineRecordLookups,
   resolveTokenFromEnv,
+  selectLogId,
   summarizeTimelineRecords,
 } from "../core/index.js";
 import { parsePositiveIntegerStrict } from "../core/parsing.js";
@@ -43,7 +47,13 @@ function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
 
-    if (token === "--json" || token === "--mock") {
+    if (
+      token === "--json" ||
+      token === "--mock" ||
+      token === "--confirm" ||
+      token === "--extract" ||
+      token === "--overwrite"
+    ) {
       flags[token.slice(2)] = true;
       continue;
     }
@@ -193,17 +203,34 @@ async function runStatus(flags: Record<string, string | boolean>, context: CliCo
 
   const { client } = await createClientFromFlags(flags, context);
 
-  const build = await client.getBuild(buildId);
-  const timeline = await client.getTimeline(buildId);
+  const [build, timeline, logs] = await Promise.all([
+    client.getBuild(buildId),
+    client.getTimeline(buildId),
+    client.listLogs(buildId),
+  ]);
   const timelineSummary = summarizeTimelineRecords(timeline);
 
   const jobId = flagString(flags, "job-id");
   const taskId = flagString(flags, "task-id");
-  const logSelection = await client.resolveBuildLogSelection({
-    buildId,
+  const stageId = flagString(flags, "stage-id");
+  const stageName = flagString(flags, "stage-name");
+  const jobName = flagString(flags, "job-name");
+  const taskName = flagString(flags, "task-name");
+  const lookups = resolveTimelineRecordLookups(timeline, {
+    ...(stageId !== undefined ? { stageId } : {}),
+    ...(stageName !== undefined ? { stageName } : {}),
     ...(jobId !== undefined ? { jobId } : {}),
+    ...(jobName !== undefined ? { jobName } : {}),
     ...(taskId !== undefined ? { taskId } : {}),
+    ...(taskName !== undefined ? { taskName } : {}),
   });
+  const selected = selectLogId({
+    taskRecord: lookups.matchedTaskRecord,
+    jobRecord: lookups.matchedJobRecord,
+    explicitLogId: undefined,
+    logs: lookups.anySelectorRequested ? undefined : logs,
+  });
+  const logSelection = buildSelectedLogInfo(lookups, selected);
 
   const payload = {
     build,
@@ -224,19 +251,36 @@ async function runLogs(flags: Record<string, string | boolean>, context: CliCont
   const explicitLogId = flagNumber(flags, "log-id");
   const jobId = flagString(flags, "job-id");
   const taskId = flagString(flags, "task-id");
+  const stageId = flagString(flags, "stage-id");
+  const stageName = flagString(flags, "stage-name");
+  const jobName = flagString(flags, "job-name");
+  const taskName = flagString(flags, "task-name");
 
   const { client } = await createClientFromFlags(flags, context);
 
-  const logs = await client.listLogs(buildId);
-  const selected = await client.resolveBuildLogSelection({
-    buildId,
+  const [timeline, logs] = await Promise.all([
+    client.getTimeline(buildId),
+    client.listLogs(buildId),
+  ]);
+
+  const lookups = resolveTimelineRecordLookups(timeline, {
+    ...(stageId !== undefined ? { stageId } : {}),
+    ...(stageName !== undefined ? { stageName } : {}),
     ...(jobId !== undefined ? { jobId } : {}),
+    ...(jobName !== undefined ? { jobName } : {}),
     ...(taskId !== undefined ? { taskId } : {}),
-    ...(explicitLogId !== undefined ? { explicitLogId } : {}),
+    ...(taskName !== undefined ? { taskName } : {}),
   });
+  const selectedRaw = selectLogId({
+    taskRecord: lookups.matchedTaskRecord,
+    jobRecord: lookups.matchedJobRecord,
+    explicitLogId,
+    logs: lookups.anySelectorRequested ? undefined : logs,
+  });
+  const selected = buildSelectedLogInfo(lookups, selectedRaw);
 
   let content: string | undefined;
-  if (selected.resolvedLogId) {
+  if (selected.resolvedLogId !== undefined) {
     content = await client.getLog(buildId, selected.resolvedLogId, 8_000);
   }
 
@@ -260,13 +304,21 @@ async function runDiagnose(flags: Record<string, string | boolean>, context: Cli
   const maxBytes = flagNumber(flags, "max-bytes");
   const jobId = flagString(flags, "job-id");
   const taskId = flagString(flags, "task-id");
+  const stageId = flagString(flags, "stage-id");
+  const stageName = flagString(flags, "stage-name");
+  const jobName = flagString(flags, "job-name");
+  const taskName = flagString(flags, "task-name");
 
   const { client, tokenSource, mock } = await createClientFromFlags(flags, context);
 
   const diagnostics = await collectBuildFailureDiagnostics(client, {
     buildId,
+    ...(stageId !== undefined ? { stageId } : {}),
+    ...(stageName !== undefined ? { stageName } : {}),
     ...(jobId !== undefined ? { jobId } : {}),
+    ...(jobName !== undefined ? { jobName } : {}),
     ...(taskId !== undefined ? { taskId } : {}),
+    ...(taskName !== undefined ? { taskName } : {}),
     ...(explicitLogId !== undefined ? { logId: explicitLogId } : {}),
     ...(maxBytes !== undefined ? { maxBytes } : {}),
   });
@@ -294,8 +346,10 @@ async function runDiagnose(flags: Record<string, string | boolean>, context: Cli
 
   const human = [
     diagnostics.summary,
+    diagnostics.matchedStageRecord ? `Matched stage: ${diagnostics.matchedStageRecord.name ?? diagnostics.matchedStageRecord.id}` : undefined,
     diagnostics.matchedJobRecord ? `Matched job: ${diagnostics.matchedJobRecord.name ?? diagnostics.matchedJobRecord.id}` : undefined,
     diagnostics.matchedTaskRecord ? `Matched task: ${diagnostics.matchedTaskRecord.name ?? diagnostics.matchedTaskRecord.id}` : undefined,
+    diagnostics.logs.selected.resolvedLogId === undefined ? "Hint: no log selected. Pass a narrower --stage/--job/--task selector or use --log-id to fetch a specific log." : undefined,
     `Artifacts (metadata only): ${artifactNames}`,
     diagnostics.logs.excerpts.length > 0 ? `Excerpts:\n${excerpts}` : "Excerpts: none",
   ]
@@ -318,14 +372,67 @@ async function runArtifacts(flags: Record<string, string | boolean>, context: Cl
   writeOutput(context, isJson(flags), { artifacts });
 }
 
+function flagBool(flags: Record<string, string | boolean>, key: string): boolean {
+  return flags[key] === true;
+}
+
+function parseArtifactKind(value: string | undefined): "auto" | "build" | "pipeline" {
+  if (value === undefined) return "auto";
+  if (value === "auto" || value === "build" || value === "pipeline") return value;
+  throw new Error("--artifact-kind must be one of: auto, build, pipeline");
+}
+
+async function runArtifactsDownload(
+  flags: Record<string, string | boolean>,
+  context: CliContext,
+): Promise<void> {
+  const buildIdRaw = flagString(flags, "build-id");
+  if (!buildIdRaw) throw new Error("artifacts download requires --build-id");
+  const artifactName = flagString(flags, "artifact-name");
+  if (!artifactName) throw new Error("artifacts download requires --artifact-name");
+  const output = flagString(flags, "output");
+  if (!output) throw new Error("artifacts download requires --output");
+
+  const buildId = parsePositiveIntegerStrict(buildIdRaw, "--build-id");
+  const artifactKind = parseArtifactKind(flagString(flags, "artifact-kind"));
+  const pipelineId = flagNumber(flags, "pipeline-id");
+  const runId = flagNumber(flags, "run-id");
+  const maxBytes = flagNumber(flags, "max-bytes");
+  const confirm = flagBool(flags, "confirm");
+  const extract = flagBool(flags, "extract");
+  const overwrite = flagBool(flags, "overwrite");
+
+  const { client } = await createClientFromFlags(flags, context);
+
+  const result = await downloadArtifact(client, {
+    buildId,
+    artifactName,
+    outputPath: output,
+    cwd: context.cwd,
+    confirm,
+    extract,
+    overwrite,
+    artifactKind,
+    ...(pipelineId !== undefined ? { pipelineId } : {}),
+    ...(runId !== undefined ? { runId } : {}),
+    ...(maxBytes !== undefined ? { maxBytes } : {}),
+  });
+
+  writeOutput(context, isJson(flags), result);
+}
+
 function usage(): string {
   return [
     "Usage:",
     "  pi-ado doctor [--json] [--mock] [--organization <org>] [--project <project>]",
-    "  pi-ado status --build-id <id> [--job-id <guid>] [--task-id <guid>] [--json] [--mock]",
-    "  pi-ado logs --build-id <id> [--job-id <guid>] [--task-id <guid>] [--log-id <id>] [--json] [--mock]",
-    "  pi-ado diagnose --build-id <id> [--job-id <guid>] [--task-id <guid>] [--log-id <id>] [--max-bytes <n>] [--json] [--mock]",
+    "  pi-ado status --build-id <id> [--stage-id <guid>] [--stage-name <name>] [--job-id <guid>] [--job-name <name>] [--task-id <guid>] [--task-name <name>] [--json] [--mock]",
+    "  pi-ado logs --build-id <id> [--stage-id <guid>] [--stage-name <name>] [--job-id <guid>] [--job-name <name>] [--task-id <guid>] [--task-name <name>] [--log-id <id>] [--json] [--mock]",
+    "  pi-ado diagnose --build-id <id> [--stage-id <guid>] [--stage-name <name>] [--job-id <guid>] [--job-name <name>] [--task-id <guid>] [--task-name <name>] [--log-id <id>] [--max-bytes <n>] [--json] [--mock]",
     "  pi-ado artifacts --build-id <id> [--json] [--mock]",
+    "  pi-ado artifacts download --build-id <id> --artifact-name <name> --output <path> --confirm [--extract] [--overwrite] [--max-bytes <n>] [--artifact-kind auto|build|pipeline] [--pipeline-id <id>] [--run-id <id>] [--json] [--mock]",
+    "",
+    "Selectors: name selectors match exact, then case-insensitive exact, then substring; ambiguous matches return candidates.",
+    "Stage selectors are status/evidence context only and never infer child task/job logs.",
   ].join("\n");
 }
 
@@ -355,6 +462,9 @@ export async function runCli(argv: string[], context: Partial<CliContext> = {}):
         return 0;
       case "artifacts":
         await runArtifacts(parsed.flags, cliContext);
+        return 0;
+      case "artifacts download":
+        await runArtifactsDownload(parsed.flags, cliContext);
         return 0;
       default:
         cliContext.stderr.write(`${usage()}\n`);

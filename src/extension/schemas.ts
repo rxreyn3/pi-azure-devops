@@ -14,15 +14,23 @@ export const doctorToolSchema = Type.Object({
 export const getStatusToolSchema = Type.Object({
   ...scopeOverrideProperties,
   buildId: Type.Integer({ minimum: 1, description: "Required build ID" }),
+  stageId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline stage record ID/GUID" })),
+  stageName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline stage display name (exact > case-insensitive > substring)" })),
   jobId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline job record ID/GUID" })),
+  jobName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline job display name (exact > case-insensitive > substring)" })),
   taskId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline task record ID/GUID" })),
+  taskName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline task display name (exact > case-insensitive > substring)" })),
 });
 
 export const getLogsToolSchema = Type.Object({
   ...scopeOverrideProperties,
   buildId: Type.Integer({ minimum: 1, description: "Required build ID" }),
+  stageId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline stage record ID/GUID" })),
+  stageName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline stage display name (status context only; never infers child logs)" })),
   jobId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline job record ID/GUID" })),
+  jobName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline job display name (exact > case-insensitive > substring)" })),
   taskId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline task record ID/GUID" })),
+  taskName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline task display name (exact > case-insensitive > substring)" })),
   logId: Type.Optional(Type.Integer({ minimum: 1, description: "Optional explicit log ID override" })),
   maxBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: 100000, description: "Optional log content max bytes (1-100000)" })),
 });
@@ -30,8 +38,12 @@ export const getLogsToolSchema = Type.Object({
 export const diagnoseFailureToolSchema = Type.Object({
   ...scopeOverrideProperties,
   buildId: Type.Integer({ minimum: 1, description: "Required build ID" }),
+  stageId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline stage record ID/GUID" })),
+  stageName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline stage display name (status context only; never infers child logs)" })),
   jobId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline job record ID/GUID" })),
+  jobName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline job display name (exact > case-insensitive > substring)" })),
   taskId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline task record ID/GUID" })),
+  taskName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline task display name (exact > case-insensitive > substring)" })),
   logId: Type.Optional(Type.Integer({ minimum: 1, description: "Optional explicit log ID override" })),
   maxBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: 100000, description: "Optional log content max bytes (1-100000)" })),
 });
@@ -39,6 +51,40 @@ export const diagnoseFailureToolSchema = Type.Object({
 export const listArtifactsToolSchema = Type.Object({
   ...scopeOverrideProperties,
   buildId: Type.Integer({ minimum: 1, description: "Required build ID" }),
+});
+
+export const downloadArtifactToolSchema = Type.Object({
+  ...scopeOverrideProperties,
+  buildId: Type.Integer({ minimum: 1, description: "Required build ID" }),
+  artifactName: Type.String({ minLength: 1, description: "Required artifact name to download" }),
+  outputPath: Type.String({
+    minLength: 1,
+    description: "Required output path relative to cwd; file when extract=false, directory when extract=true",
+  }),
+  confirm: Type.Optional(
+    Type.Boolean({
+      description: "Required true to perform a local file write; default false returns preview only",
+    }),
+  ),
+  extract: Type.Optional(
+    Type.Boolean({ description: "Extract ZIP into outputPath (treated as directory)" }),
+  ),
+  overwrite: Type.Optional(
+    Type.Boolean({ description: "Allow overwriting existing files; default refuses overwrite" }),
+  ),
+  maxBytes: Type.Optional(
+    Type.Integer({ minimum: 1, description: "Optional max artifact byte cap (default 100 MiB)" }),
+  ),
+  artifactKind: Type.Optional(
+    Type.Union(
+      [Type.Literal("auto"), Type.Literal("build"), Type.Literal("pipeline")],
+      { description: "Artifact source family selector; default auto" },
+    ),
+  ),
+  pipelineId: Type.Optional(
+    Type.Integer({ minimum: 1, description: "Pipeline ID for Pipelines Artifacts API" }),
+  ),
+  runId: Type.Optional(Type.Integer({ minimum: 1, description: "Run ID for Pipelines Artifacts API" })),
 });
 
 export const listPipelinesToolSchema = Type.Object({

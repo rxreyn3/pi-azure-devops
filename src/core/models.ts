@@ -76,11 +76,139 @@ export interface ArtifactSummary {
   downloadUrl?: string;
 }
 
+export type ArtifactKind = "auto" | "build" | "pipeline";
+
+export type ResolvedArtifactKind = "build" | "pipeline";
+
+export interface ArtifactSourceCandidate {
+  kind: ResolvedArtifactKind;
+  artifactName: string;
+  resourceType?: string;
+  pipelineId?: number;
+  runId?: number;
+}
+
+export type ArtifactSourceResolution =
+  | {
+      status: "resolved";
+      artifactKind: ArtifactKind;
+      resolved: ArtifactSourceCandidate;
+      notes?: string[];
+    }
+  | {
+      status: "ambiguous";
+      artifactKind: ArtifactKind;
+      candidates: ArtifactSourceCandidate[];
+      message: string;
+    }
+  | {
+      status: "notFound";
+      artifactKind: ArtifactKind;
+      artifactName: string;
+      message: string;
+    }
+  | {
+      status: "pipelineSourceUnresolved";
+      artifactKind: ArtifactKind;
+      artifactName: string;
+      message: string;
+    };
+
+export interface ArtifactDownloadInput {
+  buildId: number;
+  artifactName: string;
+  outputPath: string;
+  cwd: string;
+  confirm?: boolean;
+  extract?: boolean;
+  overwrite?: boolean;
+  maxBytes?: number;
+  artifactKind?: ArtifactKind;
+  pipelineId?: number;
+  runId?: number;
+}
+
+export interface ArtifactDownloadPreview {
+  status: "preview";
+  buildId: number;
+  artifactName: string;
+  artifactKind: ArtifactKind;
+  resolvedArtifactKind?: ResolvedArtifactKind;
+  pipelineId?: number;
+  runId?: number;
+  outputPath: string;
+  resolvedOutputPath: string;
+  extract: boolean;
+  overwrite: boolean;
+  maxBytes: number;
+  wouldWrite: string[];
+  requiresConfirmation: true;
+  resolution: ArtifactSourceResolution;
+  notes: string[];
+}
+
+export interface ArtifactDownloadResult {
+  status: "downloaded" | "extracted";
+  buildId: number;
+  artifactName: string;
+  artifactKind: ArtifactKind;
+  resolvedArtifactKind: ResolvedArtifactKind;
+  pipelineId?: number;
+  runId?: number;
+  outputPath: string;
+  resolvedOutputPath: string;
+  extract: boolean;
+  overwrite: boolean;
+  maxBytes: number;
+  bytesDownloaded: number;
+  writtenFiles: string[];
+  resolution: Extract<ArtifactSourceResolution, { status: "resolved" }>;
+  notes?: string[];
+}
+
+export type TimelineRecordRole = "stage" | "job" | "task";
+
+export type TimelineNameMatchMode = "exact" | "caseInsensitiveExact" | "substring";
+
+export type TimelineRecordSelector =
+  | { role: TimelineRecordRole; selectorKind: "id"; value: string }
+  | { role: TimelineRecordRole; selectorKind: "name"; value: string };
+
+export interface TimelineRecordCandidate {
+  id: string;
+  parentId?: string;
+  type?: string;
+  name?: string;
+  result?: string;
+  state?: string;
+  logId?: number;
+}
+
+export type TimelineRecordLookupResult =
+  | { status: "notRequested"; role: TimelineRecordRole }
+  | {
+      status: "matched";
+      selector: TimelineRecordSelector;
+      record: TimelineRecordCandidate;
+      matchMode?: TimelineNameMatchMode;
+    }
+  | { status: "noMatch"; selector: TimelineRecordSelector }
+  | {
+      status: "ambiguous";
+      selector: TimelineRecordSelector;
+      matchMode: TimelineNameMatchMode;
+      candidates: TimelineRecordCandidate[];
+    };
+
 export interface SelectedLogInfo {
   resolvedLogId?: number;
   resolvedLogSource?: LogSelectionSource;
+  matchedStageRecordId?: string;
   matchedJobRecordId?: string;
   matchedTaskRecordId?: string;
+  stageLookup?: TimelineRecordLookupResult;
+  jobLookup?: TimelineRecordLookupResult;
+  taskLookup?: TimelineRecordLookupResult;
 }
 
 export interface DoctorResult {

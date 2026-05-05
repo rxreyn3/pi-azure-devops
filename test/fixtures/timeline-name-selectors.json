@@ -1,0 +1,77 @@
+{
+  "id": "timeline-202",
+  "changeId": 7,
+  "lastChangedOn": "2026-04-30T10:05:00Z",
+  "records": [
+    {
+      "id": "stage-build",
+      "parentId": null,
+      "type": "Stage",
+      "name": "Build",
+      "result": "succeeded",
+      "state": "completed"
+    },
+    {
+      "id": "stage-test",
+      "parentId": null,
+      "type": "Stage",
+      "name": "Test",
+      "result": "failed",
+      "state": "completed"
+    },
+    {
+      "id": "job-compile",
+      "parentId": "stage-build",
+      "type": "Job",
+      "name": "Compile",
+      "result": "succeeded",
+      "state": "completed",
+      "log": { "id": 1 }
+    },
+    {
+      "id": "job-test-suite",
+      "parentId": "stage-test",
+      "type": "Job",
+      "name": "Test Suite",
+      "result": "failed",
+      "state": "completed",
+      "log": { "id": 4 }
+    },
+    {
+      "id": "task-run-tests-a",
+      "parentId": "job-test-suite",
+      "type": "Task",
+      "name": "Run Tests",
+      "result": "failed",
+      "state": "completed",
+      "log": { "id": 2 }
+    },
+    {
+      "id": "task-run-tests-b",
+      "parentId": "job-test-suite",
+      "type": "Task",
+      "name": "Run Tests",
+      "result": "failed",
+      "state": "completed",
+      "log": { "id": 6 }
+    },
+    {
+      "id": "task-run-linter",
+      "parentId": "job-test-suite",
+      "type": "Task",
+      "name": "Run Linter",
+      "result": "succeeded",
+      "state": "completed",
+      "log": { "id": 3 }
+    },
+    {
+      "id": "task-publish-results",
+      "parentId": "job-test-suite",
+      "type": "Task",
+      "name": "Publish Results",
+      "result": "succeeded",
+      "state": "completed",
+      "log": { "id": 5 }
+    }
+  ]
+}

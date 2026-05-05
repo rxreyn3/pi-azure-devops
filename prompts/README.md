@@ -8,11 +8,16 @@ Implemented read-only templates:
 - `ado-artifacts.md`
 - `ado-diagnose.md`
 
-These templates wrap the currently implemented `pi-ado` read-only CLI behavior and follow `skills/azure-devops/SKILL.md`. The package also exposes read-only extension tools for the same diagnostic scope (including `azure_devops_diagnose_failure`); mutating extension tools remain pending.
+These templates wrap the currently implemented `pi-ado` CLI behavior (read-only commands plus the Phase 7B preview-first local artifact download) and follow `skills/azure-devops/SKILL.md`. The package also exposes:
+
+- Read-only extension tools (including `azure_devops_diagnose_failure`).
+- A local-write extension tool: `azure_devops_download_artifact` (preview-first; writes only with `confirm: true`).
+
+The `/ado-artifacts` template covers both the metadata listing and the local artifact download / extract flow with explicit confirmation.
 
 The package manifest registers the `ado-*.md` prompt files explicitly so this README is documentation only, not a slash prompt.
 
 Pending future templates (not implemented in this phase):
 
-- mutating workflows (`ado-run`, `ado-cancel`, `ado-rerun`)
-- deep/extended diagnose workflows beyond current read-only surface
+- Remote-mutation workflows (`ado-run`, `ado-cancel`, `ado-rerun`)
+- Deep/extended diagnose workflows beyond the current read-only diagnose surface

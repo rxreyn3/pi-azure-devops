@@ -1,4 +1,5 @@
 export * from "./auth.js";
+export * from "./artifact-download.js";
 export * from "./client.js";
 export * from "./config.js";
 export * from "./diagnostics.js";

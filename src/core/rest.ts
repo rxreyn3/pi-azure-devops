@@ -15,13 +15,23 @@ export interface RestResponse<T> {
   headers: Headers;
 }
 
+export interface BinaryRequestOptions {
+  accept?: string;
+  maxBytes?: number;
+  additionalSensitiveValues?: string[];
+  auth?: "azureDevOps" | "none";
+}
+
 export interface RestClient {
   getJson<T>(url: string): Promise<RestResponse<T>>;
   getText(url: string, options?: { maxBytes?: number }): Promise<RestResponse<string>>;
+  getBinary(url: string, options?: BinaryRequestOptions): Promise<RestResponse<Uint8Array>>;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_TEXT_BYTES = 8_000;
+export const DEFAULT_MAX_ARTIFACT_BYTES = 100 * 1024 * 1024; // 100 MiB
+export const ABSOLUTE_MAX_ARTIFACT_BYTES = 500 * 1024 * 1024; // hard upper clamp
 
 function asRedactedMessage(message: string, sensitiveValues: string[]): string {
   return redactSensitiveText(message, sensitiveValues);
@@ -118,8 +128,119 @@ export function createReadOnlyRestClient(options: RestClientOptions): RestClient
     };
   }
 
+  async function getBinary(url: string, opts: BinaryRequestOptions = {}): Promise<RestResponse<Uint8Array>> {
+    const accept = opts.accept ?? "application/zip, application/octet-stream, */*";
+    const requestedMax = Number.isFinite(opts.maxBytes) ? (opts.maxBytes as number) : DEFAULT_MAX_ARTIFACT_BYTES;
+    const maxBytes = Math.min(Math.max(1, Math.floor(requestedMax)), ABSOLUTE_MAX_ARTIFACT_BYTES);
+    const auth = opts.auth ?? "azureDevOps";
+    const localSensitive = [
+      ...sensitiveValues,
+      ...(opts.additionalSensitiveValues ?? []),
+      url,
+    ];
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const headers: Record<string, string> = { Accept: accept };
+      if (auth === "azureDevOps") {
+        headers.Authorization = authHeader;
+      }
+
+      const response = await fetchImpl(url, {
+        method: "GET",
+        headers,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        const summary = summarizePayloadForError(body);
+        throw new RestRequestError(
+          asRedactedMessage(`HTTP ${response.status} ${response.statusText}: ${summary}`, localSensitive),
+          url,
+          response.status,
+        );
+      }
+
+      const reader = response.body?.getReader?.();
+      let bytes: Uint8Array;
+      if (reader) {
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (!value) continue;
+            total += value.byteLength;
+            if (total > maxBytes) {
+              try {
+                await reader.cancel();
+              } catch {
+                /* swallow cancel errors */
+              }
+              throw new RestRequestError(
+                asRedactedMessage(`Binary response exceeded maxBytes=${maxBytes}`, localSensitive),
+                url,
+                response.status,
+              );
+            }
+            chunks.push(value);
+          }
+        } finally {
+          try {
+            reader.releaseLock();
+          } catch {
+            /* swallow release errors */
+          }
+        }
+        bytes = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+      } else {
+        const buf = new Uint8Array(await response.arrayBuffer());
+        if (buf.byteLength > maxBytes) {
+          throw new RestRequestError(
+            asRedactedMessage(`Binary response exceeded maxBytes=${maxBytes}`, localSensitive),
+            url,
+            response.status,
+          );
+        }
+        bytes = buf;
+      }
+
+      return {
+        status: response.status,
+        data: bytes,
+        headers: response.headers,
+      };
+    } catch (error) {
+      if (error instanceof RestRequestError) {
+        throw error;
+      }
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new RestRequestError(
+          asRedactedMessage(`Request timed out after ${timeoutMs}ms`, localSensitive),
+          url,
+          undefined,
+          error,
+        );
+      }
+      const message = error instanceof Error ? error.message : "Unknown request failure";
+      throw new RestRequestError(asRedactedMessage(message, localSensitive), url, undefined, error);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   return {
     getJson,
     getText,
+    getBinary,
   };
 }

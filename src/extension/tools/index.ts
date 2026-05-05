@@ -3,6 +3,7 @@ import { defineTool } from "@mariozechner/pi-coding-agent";
 import {
   diagnoseFailureToolSchema,
   doctorToolSchema,
+  downloadArtifactToolSchema,
   getLogsToolSchema,
   getStatusToolSchema,
   listArtifactsToolSchema,
@@ -12,6 +13,7 @@ import {
 import {
   runDiagnoseFailureTool,
   runDoctorTool,
+  runDownloadArtifactTool,
   runGetLogsTool,
   runGetStatusTool,
   runListArtifactsTool,
@@ -19,6 +21,7 @@ import {
   runListPipelinesTool,
   type DiagnoseFailureToolInput,
   type DoctorToolInput,
+  type DownloadArtifactToolInput,
   type GetLogsToolInput,
   type GetStatusToolInput,
   type ListArtifactsToolInput,
@@ -96,6 +99,17 @@ const azureDevopsListBuildsTool = defineTool({
   },
 });
 
+const azureDevopsDownloadArtifactTool = defineTool({
+  name: "azure_devops_download_artifact",
+  label: "Azure DevOps Download Artifact",
+  description:
+    "Download a build/pipeline artifact ZIP. Preview-first: writes a local file only when confirm=true. Signed URLs are redacted from output.",
+  parameters: downloadArtifactToolSchema,
+  async execute(_toolCallId, params: DownloadArtifactToolInput, _signal, _onUpdate, ctx) {
+    return runDownloadArtifactTool(params, { cwd: ctx.cwd, env: process.env });
+  },
+});
+
 export const READ_ONLY_AZURE_DEVOPS_TOOLS = [
   azureDevopsDoctorTool,
   azureDevopsGetStatusTool,
@@ -107,3 +121,14 @@ export const READ_ONLY_AZURE_DEVOPS_TOOLS = [
 ] as const;
 
 export const READ_ONLY_AZURE_DEVOPS_TOOL_NAMES = READ_ONLY_AZURE_DEVOPS_TOOLS.map((tool) => tool.name);
+
+export const LOCAL_WRITE_AZURE_DEVOPS_TOOLS = [azureDevopsDownloadArtifactTool] as const;
+
+export const LOCAL_WRITE_AZURE_DEVOPS_TOOL_NAMES = LOCAL_WRITE_AZURE_DEVOPS_TOOLS.map((tool) => tool.name);
+
+export const AZURE_DEVOPS_TOOLS = [
+  ...READ_ONLY_AZURE_DEVOPS_TOOLS,
+  ...LOCAL_WRITE_AZURE_DEVOPS_TOOLS,
+] as const;
+
+export const AZURE_DEVOPS_TOOL_NAMES = AZURE_DEVOPS_TOOLS.map((tool) => tool.name);

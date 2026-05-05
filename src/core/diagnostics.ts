@@ -1,6 +1,7 @@
 import { redactSensitiveText } from "./redact.js";
 import {
-  findTimelineRecordById,
+  buildSelectedLogInfo,
+  resolveTimelineRecordLookups,
   selectLogId,
   summarizeTimelineRecords,
   type AzureDevOpsClient,
@@ -13,7 +14,6 @@ import type {
   TimelineRecord,
   TimelineSummary,
 } from "./models.js";
-
 const DEFAULT_MAX_BYTES = 8_000;
 const MAX_MAX_BYTES = 100_000;
 const DEFAULT_CONTEXT_LINES = 2;
@@ -28,8 +28,12 @@ const LOG_MARKERS: Array<{ marker: string; priority: number; test: RegExp }> = [
 
 export interface BuildFailureDiagnosticsInput {
   buildId: number;
+  stageId?: string;
+  stageName?: string;
   jobId?: string;
+  jobName?: string;
   taskId?: string;
+  taskName?: string;
   logId?: number;
   maxBytes?: number;
 }
@@ -59,6 +63,7 @@ export interface BuildFailureDiagnosticsBundle {
   timelineSummary: TimelineSummary;
   failedRecords: TimelineRecordEvidence[];
   canceledRecords: TimelineRecordEvidence[];
+  matchedStageRecord?: TimelineRecordEvidence;
   matchedJobRecord?: TimelineRecordEvidence;
   matchedTaskRecord?: TimelineRecordEvidence;
   issueMessages: string[];
@@ -167,14 +172,25 @@ function buildHumanSummary(bundle: Omit<BuildFailureDiagnosticsBundle, "summary"
     ? `log ${bundle.logs.selected.resolvedLogId} (${bundle.logs.selected.resolvedLogSource ?? "unknown source"})`
     : "none";
 
+  const matchedContext = [
+    bundle.matchedStageRecord ? `stage ${bundle.matchedStageRecord.name ?? bundle.matchedStageRecord.id}` : undefined,
+    bundle.matchedJobRecord ? `job ${bundle.matchedJobRecord.name ?? bundle.matchedJobRecord.id}` : undefined,
+    bundle.matchedTaskRecord ? `task ${bundle.matchedTaskRecord.name ?? bundle.matchedTaskRecord.id}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   return [
     `Build ${bundle.buildId}: ${statusText}`,
     `Timeline failures: ${bundle.timelineSummary.failedRecords}, warnings: ${bundle.timelineSummary.warningCount}, problems: ${bundle.timelineSummary.problemCount}`,
     `Primary failed record: ${failedTop}`,
+    matchedContext ? `Matched: ${matchedContext}` : undefined,
     `Selected log: ${selectedLog}`,
     `Log excerpts: ${bundle.logs.excerpts.length}`,
     `Artifacts: ${bundle.artifacts.length}`,
-  ].join(" | ");
+  ]
+    .filter(Boolean)
+    .join(" | ");
 }
 
 export async function collectBuildFailureDiagnostics(
@@ -190,18 +206,24 @@ export async function collectBuildFailureDiagnostics(
     client.listArtifacts(input.buildId),
   ]);
 
-  const matchedJob = findTimelineRecordById(timelineRecords, input.jobId);
-  const matchedTask = findTimelineRecordById(timelineRecords, input.taskId);
-
-  const selected = selectLogId({
-    taskRecord: matchedTask,
-    jobRecord: matchedJob,
-    explicitLogId: input.logId,
-    logs,
+  const lookups = resolveTimelineRecordLookups(timelineRecords, {
+    ...(input.stageId !== undefined ? { stageId: input.stageId } : {}),
+    ...(input.stageName !== undefined ? { stageName: input.stageName } : {}),
+    ...(input.jobId !== undefined ? { jobId: input.jobId } : {}),
+    ...(input.jobName !== undefined ? { jobName: input.jobName } : {}),
+    ...(input.taskId !== undefined ? { taskId: input.taskId } : {}),
+    ...(input.taskName !== undefined ? { taskName: input.taskName } : {}),
   });
 
-  const selectedLog = selected.logId ? logs.find((entry) => entry.id === selected.logId) : undefined;
-  const content = selected.logId ? await client.getLog(input.buildId, selected.logId, maxBytesApplied) : undefined;
+  const selected = selectLogId({
+    taskRecord: lookups.matchedTaskRecord,
+    jobRecord: lookups.matchedJobRecord,
+    explicitLogId: input.logId,
+    logs: lookups.anySelectorRequested ? undefined : logs,
+  });
+
+  const selectedLog = selected.logId !== undefined ? logs.find((entry) => entry.id === selected.logId) : undefined;
+  const content = selected.logId !== undefined ? await client.getLog(input.buildId, selected.logId, maxBytesApplied) : undefined;
   const excerpts = content ? extractLogExcerpts(content) : [];
 
   const failedRecords = timelineRecords
@@ -216,12 +238,7 @@ export async function collectBuildFailureDiagnostics(
     .flatMap((record) => recordIssueMessages(record))
     .filter((message, index, all) => all.findIndex((candidate) => candidate === message) === index);
 
-  const selectedDetails: SelectedLogInfo = {
-    ...(matchedJob?.id ? { matchedJobRecordId: matchedJob.id } : {}),
-    ...(matchedTask?.id ? { matchedTaskRecordId: matchedTask.id } : {}),
-    ...(selected.logId !== undefined ? { resolvedLogId: selected.logId } : {}),
-    ...(selected.source ? { resolvedLogSource: selected.source } : {}),
-  };
+  const selectedDetails: SelectedLogInfo = buildSelectedLogInfo(lookups, selected);
 
   const bundleWithoutSummary: Omit<BuildFailureDiagnosticsBundle, "summary"> = {
     buildId: input.buildId,
@@ -229,8 +246,9 @@ export async function collectBuildFailureDiagnostics(
     timelineSummary: summarizeTimelineRecords(timelineRecords),
     failedRecords,
     canceledRecords,
-    ...(matchedJob ? { matchedJobRecord: toTimelineEvidence(matchedJob) } : {}),
-    ...(matchedTask ? { matchedTaskRecord: toTimelineEvidence(matchedTask) } : {}),
+    ...(lookups.matchedStageRecord ? { matchedStageRecord: toTimelineEvidence(lookups.matchedStageRecord) } : {}),
+    ...(lookups.matchedJobRecord ? { matchedJobRecord: toTimelineEvidence(lookups.matchedJobRecord) } : {}),
+    ...(lookups.matchedTaskRecord ? { matchedTaskRecord: toTimelineEvidence(lookups.matchedTaskRecord) } : {}),
     issueMessages,
     logs: {
       available: logs,

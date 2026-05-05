@@ -25,6 +25,8 @@ Status legend:
 | List build logs | `/{project}/_apis/build/builds/{buildId}/logs` | `7.1` | `verified` | Log selection now prefers timeline-matched task/job log IDs when available. |
 | Get build log content | `/{project}/_apis/build/builds/{buildId}/logs/{logId}` | `7.1` | `verified` | Bounded fetch (`maxBytes=8000`) retained. |
 | List build artifacts | `/{project}/_apis/build/builds/{buildId}/artifacts` | `7.1` | `verified` | Listing only; no download/write behavior in current phase. |
+| Get build artifact (single) | `/{project}/_apis/build/builds/{buildId}/artifacts?artifactName={name}` | `7.1` | `mocked-only` | Used by Phase 7B local artifact download for the Build Artifacts API; downloadUrl fetched with Azure DevOps Authorization. |
+| Get pipeline artifact (single) | `/{project}/_apis/pipelines/{pipelineId}/runs/{runId}/artifacts?artifactName={name}[&$expand=signedContent]` | `7.1` | `mocked-only` | Used by Phase 7B local artifact download for the Pipelines Artifacts API; signedContent.url fetched with no Authorization header. |
 
 ### Live verification note (read-only)
 
@@ -55,6 +57,7 @@ Recent live runs using env-driven org/project values verified all 8 read-only op
 - `pi-ado logs --build-id`: calls listLogs, resolves log selection precedence, then getLog.
 - `pi-ado diagnose --build-id`: bundles getBuild + getTimeline + listLogs + selected getLog + listArtifacts with bounded excerpts.
 - `pi-ado artifacts --build-id`: calls listArtifacts.
+- `pi-ado artifacts download --build-id --artifact-name --output [--confirm] [--extract] [--overwrite] [--artifact-kind] [--pipeline-id] [--run-id]`: Phase 7B local artifact download. Preview without `--confirm`; with `--confirm`, fetches the single artifact metadata for the resolved source family and downloads the ZIP bytes. Pipeline signed URLs are fetched with no Azure DevOps Authorization header.
 
 ## Auth and scope notes
 

@@ -31,6 +31,68 @@ test("collectBuildFailureDiagnostics returns timeline/log/artifact evidence bund
   assert.match(diagnostics.summary, /Build 101/i);
 });
 
+test("collectBuildFailureDiagnostics resolves taskName selector to matched task and selected log", async () => {
+  const diagnostics = await collectBuildFailureDiagnostics(createMockClient(), {
+    buildId: 202,
+    taskName: "Run Linter",
+    maxBytes: 200,
+  });
+
+  assert.equal(diagnostics.matchedTaskRecord?.id, "task-run-linter");
+  assert.equal(diagnostics.logs.selected.resolvedLogId, 3);
+  assert.equal(diagnostics.logs.selected.resolvedLogSource, "timelineTask");
+  assert.equal(diagnostics.logs.selected.taskLookup?.status, "matched");
+  if (diagnostics.logs.selected.taskLookup?.status === "matched") {
+    assert.equal(diagnostics.logs.selected.taskLookup.matchMode, "exact");
+  }
+});
+
+test("collectBuildFailureDiagnostics surfaces ambiguous taskName without selecting a log or downloading content", async () => {
+  const diagnostics = await collectBuildFailureDiagnostics(createMockClient(), {
+    buildId: 202,
+    taskName: "Run Tests",
+    maxBytes: 200,
+  });
+
+  assert.equal(diagnostics.matchedTaskRecord, undefined);
+  assert.equal(diagnostics.logs.selected.resolvedLogId, undefined);
+  assert.equal(diagnostics.logs.selected.resolvedLogSource, undefined);
+  assert.equal(diagnostics.logs.content, undefined);
+  assert.equal(diagnostics.logs.excerpts.length, 0);
+  assert.equal(diagnostics.logs.selected.taskLookup?.status, "ambiguous");
+  if (diagnostics.logs.selected.taskLookup?.status === "ambiguous") {
+    assert.equal(diagnostics.logs.selected.taskLookup.candidates.length, 2);
+  }
+});
+
+test("collectBuildFailureDiagnostics surfaces noMatch selector and avoids first-log fallback", async () => {
+  const diagnostics = await collectBuildFailureDiagnostics(createMockClient(), {
+    buildId: 202,
+    jobName: "does-not-exist",
+    maxBytes: 200,
+  });
+
+  assert.equal(diagnostics.matchedJobRecord, undefined);
+  assert.equal(diagnostics.logs.selected.resolvedLogId, undefined);
+  assert.equal(diagnostics.logs.selected.jobLookup?.status, "noMatch");
+});
+
+test("collectBuildFailureDiagnostics records matched stage as context only without inferring a log", async () => {
+  const diagnostics = await collectBuildFailureDiagnostics(createMockClient(), {
+    buildId: 202,
+    stageName: "Test",
+    maxBytes: 200,
+  });
+
+  assert.equal(diagnostics.matchedStageRecord?.id, "stage-test");
+  assert.equal(diagnostics.matchedJobRecord, undefined);
+  assert.equal(diagnostics.matchedTaskRecord, undefined);
+  assert.equal(diagnostics.logs.selected.resolvedLogId, undefined);
+  assert.equal(diagnostics.logs.selected.resolvedLogSource, undefined);
+  assert.equal(diagnostics.logs.selected.matchedStageRecordId, "stage-test");
+  assert.match(diagnostics.summary, /stage Test/);
+});
+
 test("extractLogExcerpts deterministically captures marker windows", () => {
   const excerpts = extractLogExcerpts(
     [

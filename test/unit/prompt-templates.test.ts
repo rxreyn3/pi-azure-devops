@@ -65,3 +65,29 @@ test("phase4 prompt templates avoid mutation instructions and concrete live iden
     }
   }
 });
+
+test("phase7a prompts mention name selectors and ambiguity follow-up", async () => {
+  const promptsRequiringSelectors = ["ado-status.md", "ado-logs.md", "ado-diagnose.md"];
+
+  for (const filename of promptsRequiringSelectors) {
+    const filePath = path.join(PROMPT_DIR, filename);
+    const content = await readFile(filePath, "utf8");
+    assert.match(content, /--job-name\b/, `${filename} must document --job-name selector`);
+    assert.match(content, /--task-name\b/, `${filename} must document --task-name selector`);
+    assert.match(content, /--stage-name\b/, `${filename} must document --stage-name selector`);
+    assert.match(content, /ambigu/i, `${filename} must explain ambiguous-selector follow-up`);
+  }
+});
+
+test("phase7b ado-artifacts prompt documents preview-first artifact download semantics", async () => {
+  const filePath = path.join(PROMPT_DIR, "ado-artifacts.md");
+  const content = await readFile(filePath, "utf8");
+
+  assert.match(content, /preview/i, "ado-artifacts must mention preview semantics");
+  assert.match(content, /--confirm/, "ado-artifacts must document --confirm");
+  assert.match(content, /local file write/i, "ado-artifacts must classify download as local file write");
+  assert.match(content, /--extract/, "ado-artifacts must document --extract");
+  assert.match(content, /--overwrite/, "ado-artifacts must document --overwrite");
+  assert.match(content, /--artifact-kind/, "ado-artifacts must document --artifact-kind");
+  assert.match(content, /signed/i, "ado-artifacts must mention signed URL handling");
+});

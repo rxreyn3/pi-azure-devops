@@ -3,19 +3,24 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  buildSelectedLogInfo,
   collectBuildFailureDiagnostics,
   createAzureDevOpsClient,
   createFixtureFetch,
   createReadOnlyRestClient,
-  findTimelineRecordById,
+  downloadArtifact,
   getAuthSensitiveValues,
   redactDiagnosticsBundle,
   redactSensitiveText,
   resolveAzureDevOpsConfig,
   resolveScope,
+  resolveTimelineRecordLookups,
   resolveTokenFromEnv,
   selectLogId,
   summarizeTimelineRecords,
+  type ArtifactDownloadPreview,
+  type ArtifactDownloadResult,
+  type ArtifactKind,
   type AzureDevOpsClient,
   type BuildFailureDiagnosticsBundle,
   type BuildSummary,
@@ -52,8 +57,12 @@ export interface DoctorToolInput extends CommonToolInput {}
 
 export interface GetStatusToolInput extends CommonToolInput {
   buildId: number;
+  stageId?: string;
+  stageName?: string;
   jobId?: string;
+  jobName?: string;
   taskId?: string;
+  taskName?: string;
 }
 
 export interface GetStatusToolDetails {
@@ -70,8 +79,12 @@ export interface GetStatusToolDetails {
 
 export interface GetLogsToolInput extends CommonToolInput {
   buildId: number;
+  stageId?: string;
+  stageName?: string;
   jobId?: string;
+  jobName?: string;
   taskId?: string;
+  taskName?: string;
   logId?: number;
   maxBytes?: number;
 }
@@ -93,8 +106,12 @@ export interface GetLogsToolDetails {
 
 export interface DiagnoseFailureToolInput extends CommonToolInput {
   buildId: number;
+  stageId?: string;
+  stageName?: string;
   jobId?: string;
+  jobName?: string;
   taskId?: string;
+  taskName?: string;
   logId?: number;
   maxBytes?: number;
 }
@@ -345,14 +362,28 @@ export async function runGetStatusTool(
   const context = createToolRuntimeContext(partialContext);
   const runtime = await createReadOnlyRuntime(input, context);
 
-  const build = await runtime.client.getBuild(input.buildId);
-  const timelineRecords = await runtime.client.getTimeline(input.buildId);
+  const [build, timelineRecords, logs] = await Promise.all([
+    runtime.client.getBuild(input.buildId),
+    runtime.client.getTimeline(input.buildId),
+    runtime.client.listLogs(input.buildId),
+  ]);
   const timeline = summarizeTimelineRecords(timelineRecords);
-  const selected = await runtime.client.resolveBuildLogSelection({
-    buildId: input.buildId,
+
+  const lookups = resolveTimelineRecordLookups(timelineRecords, {
+    ...(input.stageId !== undefined ? { stageId: input.stageId } : {}),
+    ...(input.stageName !== undefined ? { stageName: input.stageName } : {}),
     ...(input.jobId !== undefined ? { jobId: input.jobId } : {}),
+    ...(input.jobName !== undefined ? { jobName: input.jobName } : {}),
     ...(input.taskId !== undefined ? { taskId: input.taskId } : {}),
+    ...(input.taskName !== undefined ? { taskName: input.taskName } : {}),
   });
+  const selectedRaw = selectLogId({
+    taskRecord: lookups.matchedTaskRecord,
+    jobRecord: lookups.matchedJobRecord,
+    explicitLogId: undefined,
+    logs: lookups.anySelectorRequested ? undefined : logs,
+  });
+  const selected = buildSelectedLogInfo(lookups, selectedRaw);
 
   const details: GetStatusToolDetails = {
     mode: runtime.mode,
@@ -379,23 +410,24 @@ export async function runGetLogsTool(
   const timelineRecords = await runtime.client.getTimeline(input.buildId);
   const logs = await runtime.client.listLogs(input.buildId);
 
-  const matchedJob = findTimelineRecordById(timelineRecords, input.jobId);
-  const matchedTask = findTimelineRecordById(timelineRecords, input.taskId);
+  const lookups = resolveTimelineRecordLookups(timelineRecords, {
+    ...(input.stageId !== undefined ? { stageId: input.stageId } : {}),
+    ...(input.stageName !== undefined ? { stageName: input.stageName } : {}),
+    ...(input.jobId !== undefined ? { jobId: input.jobId } : {}),
+    ...(input.jobName !== undefined ? { jobName: input.jobName } : {}),
+    ...(input.taskId !== undefined ? { taskId: input.taskId } : {}),
+    ...(input.taskName !== undefined ? { taskName: input.taskName } : {}),
+  });
   const selected = selectLogId({
-    taskRecord: matchedTask,
-    jobRecord: matchedJob,
+    taskRecord: lookups.matchedTaskRecord,
+    jobRecord: lookups.matchedJobRecord,
     explicitLogId: input.logId,
-    logs,
+    logs: lookups.anySelectorRequested ? undefined : logs,
   });
 
-  const selectedDetails: SelectedLogInfo = {
-    ...(matchedJob?.id ? { matchedJobRecordId: matchedJob.id } : {}),
-    ...(matchedTask?.id ? { matchedTaskRecordId: matchedTask.id } : {}),
-    ...(selected.logId ? { resolvedLogId: selected.logId } : {}),
-    ...(selected.source ? { resolvedLogSource: selected.source } : {}),
-  };
+  const selectedDetails: SelectedLogInfo = buildSelectedLogInfo(lookups, selected);
 
-  const selectedLog = selected.logId ? logs.find((entry) => entry.id === selected.logId) : undefined;
+  const selectedLog = selected.logId !== undefined ? logs.find((entry) => entry.id === selected.logId) : undefined;
   const logContent =
     selected.logId !== undefined
       ? await runtime.client.getLog(input.buildId, selected.logId, maxBytesApplied)
@@ -407,7 +439,7 @@ export async function runGetLogsTool(
     buildId: input.buildId,
     logs,
     selected: selectedDetails,
-    ...(selectedLog ? { selectedLog } : {}),
+    ...(selectedLog !== undefined ? { selectedLog } : {}),
     maxBytesApplied,
     ...(logContent !== undefined ? { content: redactSensitiveText(logContent, runtime.authSensitiveValues) } : {}),
   };
@@ -427,8 +459,12 @@ export async function runDiagnoseFailureTool(
 
   const diagnostics = await collectBuildFailureDiagnostics(runtime.client, {
     buildId: input.buildId,
+    ...(input.stageId !== undefined ? { stageId: input.stageId } : {}),
+    ...(input.stageName !== undefined ? { stageName: input.stageName } : {}),
     ...(input.jobId !== undefined ? { jobId: input.jobId } : {}),
+    ...(input.jobName !== undefined ? { jobName: input.jobName } : {}),
     ...(input.taskId !== undefined ? { taskId: input.taskId } : {}),
+    ...(input.taskName !== undefined ? { taskName: input.taskName } : {}),
     ...(input.logId !== undefined ? { logId: input.logId } : {}),
     ...(input.maxBytes !== undefined ? { maxBytes: input.maxBytes } : {}),
   });
@@ -517,6 +553,76 @@ export async function runListBuildsTool(
 
   return {
     content: [{ type: "text", text: formatToolText("azure_devops_list_builds", details, runtime.authSensitiveValues) }],
+    details,
+  };
+}
+
+export interface DownloadArtifactToolInput extends CommonToolInput {
+  buildId: number;
+  artifactName: string;
+  outputPath: string;
+  confirm?: boolean;
+  extract?: boolean;
+  overwrite?: boolean;
+  maxBytes?: number;
+  artifactKind?: ArtifactKind;
+  pipelineId?: number;
+  runId?: number;
+}
+
+export interface DownloadArtifactToolDetails {
+  mode: "mock" | "live";
+  scope: {
+    organization: string;
+    project: string;
+    profile?: string;
+  };
+  outcome: ArtifactDownloadPreview | ArtifactDownloadResult;
+  semantics: string;
+}
+
+export async function runDownloadArtifactTool(
+  input: DownloadArtifactToolInput,
+  partialContext: Partial<ToolRuntimeContext> = {},
+): Promise<ToolResult<DownloadArtifactToolDetails>> {
+  const context = createToolRuntimeContext(partialContext);
+  const runtime = await createReadOnlyRuntime(input, context);
+
+  const outcome = await downloadArtifact(runtime.client, {
+    buildId: input.buildId,
+    artifactName: input.artifactName,
+    outputPath: input.outputPath,
+    cwd: context.cwd,
+    confirm: input.confirm === true,
+    extract: input.extract === true,
+    overwrite: input.overwrite === true,
+    artifactKind: input.artifactKind ?? "auto",
+    ...(input.pipelineId !== undefined ? { pipelineId: input.pipelineId } : {}),
+    ...(input.runId !== undefined ? { runId: input.runId } : {}),
+    ...(input.maxBytes !== undefined ? { maxBytes: input.maxBytes } : {}),
+  });
+
+  const details: DownloadArtifactToolDetails = {
+    mode: runtime.mode,
+    scope: runtime.scope,
+    outcome,
+    semantics:
+      outcome.status === "preview"
+        ? "Preview only; no file writes performed. Pass confirm=true to download. Signed URLs are redacted."
+        : "Local file write completed under cwd. Signed URLs are redacted from output.",
+  };
+
+  return {
+    content: [
+      {
+        type: "text",
+        text: formatToolText(
+          "azure_devops_download_artifact",
+          details,
+          runtime.authSensitiveValues,
+        ),
+      },
+    ],
     details,
   };
 }

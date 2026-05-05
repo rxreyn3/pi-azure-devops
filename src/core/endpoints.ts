@@ -80,5 +80,15 @@ export function buildReadOnlyEndpoints(scope: Pick<AzureDevOpsScope, "organizati
       `${base}/_apis/build/builds/${buildId}/logs/${logId}?api-version=${encodeURIComponent(apiVersion)}`,
     listArtifacts: (buildId: number, apiVersion = API_VERSION_DEFAULT) =>
       `${base}/_apis/build/builds/${buildId}/artifacts?api-version=${encodeURIComponent(apiVersion)}`,
+    getBuildArtifact: (buildId: number, artifactName: string, apiVersion = API_VERSION_DEFAULT) =>
+      `${base}/_apis/build/builds/${buildId}/artifacts?artifactName=${encodeURIComponent(artifactName)}&api-version=${encodeURIComponent(apiVersion)}`,
+    getPipelineArtifact: (
+      pipelineId: number,
+      runId: number,
+      artifactName: string,
+      expandSignedContent = false,
+      apiVersion = API_VERSION_DEFAULT,
+    ) =>
+      `${base}/_apis/pipelines/${pipelineId}/runs/${runId}/artifacts?artifactName=${encodeURIComponent(artifactName)}${expandSignedContent ? "&$expand=signedContent" : ""}&api-version=${encodeURIComponent(apiVersion)}`,
   };
 }
