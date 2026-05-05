@@ -1,6 +1,7 @@
 import { buildBasicAuthHeader } from "./auth.js";
 import { RestRequestError } from "./errors.js";
 import { redactSensitiveText, summarizePayloadForError } from "./redact.js";
+import { DEFAULT_LOG_MAX_BYTES } from "./limits.js";
 
 export interface RestClientOptions {
   token: string;
@@ -15,6 +16,16 @@ export interface RestResponse<T> {
   headers: Headers;
 }
 
+export interface RestTextResponse {
+  status: number;
+  data: string;
+  headers: Headers;
+  /** Total length (in JS string code units) of the unsliced response body. */
+  totalBytes: number;
+  /** True when the returned `data` is shorter than the full response body. */
+  truncated: boolean;
+}
+
 export interface BinaryRequestOptions {
   accept?: string;
   maxBytes?: number;
@@ -24,12 +35,11 @@ export interface BinaryRequestOptions {
 
 export interface RestClient {
   getJson<T>(url: string): Promise<RestResponse<T>>;
-  getText(url: string, options?: { maxBytes?: number }): Promise<RestResponse<string>>;
+  getText(url: string, options?: { maxBytes?: number }): Promise<RestTextResponse>;
   getBinary(url: string, options?: BinaryRequestOptions): Promise<RestResponse<Uint8Array>>;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-const DEFAULT_MAX_TEXT_BYTES = 8_000;
 export const DEFAULT_MAX_ARTIFACT_BYTES = 100 * 1024 * 1024; // 100 MiB
 export const ABSOLUTE_MAX_ARTIFACT_BYTES = 500 * 1024 * 1024; // hard upper clamp
 
@@ -118,13 +128,17 @@ export function createReadOnlyRestClient(options: RestClientOptions): RestClient
     }
   }
 
-  async function getText(url: string, opts: { maxBytes?: number } = {}): Promise<RestResponse<string>> {
-    const maxBytes = opts.maxBytes ?? DEFAULT_MAX_TEXT_BYTES;
+  async function getText(url: string, opts: { maxBytes?: number } = {}): Promise<RestTextResponse> {
+    const maxBytes = opts.maxBytes ?? DEFAULT_LOG_MAX_BYTES;
     const { response, rawBody } = await request(url, "text/plain, text/*, */*");
+    const totalBytes = rawBody.length;
+    const data = rawBody.slice(0, maxBytes);
     return {
       status: response.status,
-      data: rawBody.slice(0, maxBytes),
+      data,
       headers: response.headers,
+      totalBytes,
+      truncated: totalBytes > data.length,
     };
   }
 

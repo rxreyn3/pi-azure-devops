@@ -25,14 +25,14 @@ import {
   type BuildFailureDiagnosticsBundle,
   type BuildSummary,
   type DoctorResult,
+  type LogFetchResult,
   type LogSummary,
   type PipelineSummary,
   type SelectedLogInfo,
   type TimelineSummary,
 } from "../../core/index.js";
 
-const DEFAULT_LOG_MAX_BYTES = 8_000;
-const MAX_LOG_MAX_BYTES = 100_000;
+import { DEFAULT_LOG_MAX_BYTES, MAX_LOG_MAX_BYTES } from "../../core/limits.js";
 const DEFAULT_TOP = 10;
 const MAX_TOP = 50;
 
@@ -87,6 +87,8 @@ export interface GetLogsToolInput extends CommonToolInput {
   taskName?: string;
   logId?: number;
   maxBytes?: number;
+  startLine?: number;
+  endLine?: number;
 }
 
 export interface GetLogsToolDetails {
@@ -102,6 +104,13 @@ export interface GetLogsToolDetails {
   selectedLog?: LogSummary;
   maxBytesApplied: number;
   content?: string;
+  /** Length of the response body the server returned for the selected log URL (post-range). */
+  contentTotalBytes?: number;
+  /** True when `content` was head-truncated by `maxBytesApplied`. Combine with `startLine`/`endLine` for tail/window fetches. */
+  contentTruncated?: boolean;
+  /** Echoed when the caller requested a line range. */
+  contentStartLine?: number;
+  contentEndLine?: number;
 }
 
 export interface DiagnoseFailureToolInput extends CommonToolInput {
@@ -114,6 +123,8 @@ export interface DiagnoseFailureToolInput extends CommonToolInput {
   taskName?: string;
   logId?: number;
   maxBytes?: number;
+  startLine?: number;
+  endLine?: number;
 }
 
 export interface DiagnoseFailureToolDetails {
@@ -428,10 +439,15 @@ export async function runGetLogsTool(
   const selectedDetails: SelectedLogInfo = buildSelectedLogInfo(lookups, selected);
 
   const selectedLog = selected.logId !== undefined ? logs.find((entry) => entry.id === selected.logId) : undefined;
-  const logContent =
+  const logResult: LogFetchResult | undefined =
     selected.logId !== undefined
-      ? await runtime.client.getLog(input.buildId, selected.logId, maxBytesApplied)
+      ? await runtime.client.getLog(input.buildId, selected.logId, {
+          maxBytes: maxBytesApplied,
+          ...(input.startLine !== undefined ? { startLine: input.startLine } : {}),
+          ...(input.endLine !== undefined ? { endLine: input.endLine } : {}),
+        })
       : undefined;
+  const logContent = logResult?.content;
 
   const details: GetLogsToolDetails = {
     mode: runtime.mode,
@@ -442,6 +458,10 @@ export async function runGetLogsTool(
     ...(selectedLog !== undefined ? { selectedLog } : {}),
     maxBytesApplied,
     ...(logContent !== undefined ? { content: redactSensitiveText(logContent, runtime.authSensitiveValues) } : {}),
+    ...(logResult !== undefined ? { contentTotalBytes: logResult.totalBytes } : {}),
+    ...(logResult !== undefined ? { contentTruncated: logResult.truncated } : {}),
+    ...(input.startLine !== undefined ? { contentStartLine: input.startLine } : {}),
+    ...(input.endLine !== undefined ? { contentEndLine: input.endLine } : {}),
   };
 
   return {
@@ -467,6 +487,8 @@ export async function runDiagnoseFailureTool(
     ...(input.taskName !== undefined ? { taskName: input.taskName } : {}),
     ...(input.logId !== undefined ? { logId: input.logId } : {}),
     ...(input.maxBytes !== undefined ? { maxBytes: input.maxBytes } : {}),
+    ...(input.startLine !== undefined ? { startLine: input.startLine } : {}),
+    ...(input.endLine !== undefined ? { endLine: input.endLine } : {}),
   });
   const redactedDiagnostics = redactDiagnosticsBundle(diagnostics, runtime.authSensitiveValues);
 

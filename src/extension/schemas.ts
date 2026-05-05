@@ -32,7 +32,9 @@ export const getLogsToolSchema = Type.Object({
   taskId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline task record ID/GUID" })),
   taskName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline task display name (exact > case-insensitive > substring)" })),
   logId: Type.Optional(Type.Integer({ minimum: 1, description: "Optional explicit log ID override" })),
-  maxBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: 100000, description: "Optional log content max bytes (1-100000)" })),
+  maxBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: 100000, description: "Optional log content max characters (1-100000). Slice taken from log start; for build logs the failure typically appears near the end. Prefer startLine/endLine for tail or window fetches when content is needed." })),
+  startLine: Type.Optional(Type.Integer({ minimum: 1, description: "Optional log line number to start at, inclusive (1-indexed). Pair with endLine for a tail or window without head-only maxBytes truncation." })),
+  endLine: Type.Optional(Type.Integer({ minimum: 1, description: "Optional log line number to end at, inclusive (1-indexed)." })),
 });
 
 export const diagnoseFailureToolSchema = Type.Object({
@@ -45,7 +47,9 @@ export const diagnoseFailureToolSchema = Type.Object({
   taskId: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline task record ID/GUID" })),
   taskName: Type.Optional(Type.String({ minLength: 1, description: "Optional timeline task display name (exact > case-insensitive > substring)" })),
   logId: Type.Optional(Type.Integer({ minimum: 1, description: "Optional explicit log ID override" })),
-  maxBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: 100000, description: "Optional log content max bytes (1-100000)" })),
+  maxBytes: Type.Optional(Type.Integer({ minimum: 1, maximum: 100000, description: "Optional log content max characters (1-100000). Slice taken from log start; prefer startLine/endLine for tail or window fetches. The most authoritative failure text is in the returned `failedRecords[].issueMessages` and is not truncated by this cap." })),
+  startLine: Type.Optional(Type.Integer({ minimum: 1, description: "Optional log line number to start at, inclusive (1-indexed)." })),
+  endLine: Type.Optional(Type.Integer({ minimum: 1, description: "Optional log line number to end at, inclusive (1-indexed)." })),
 });
 
 export const listArtifactsToolSchema = Type.Object({

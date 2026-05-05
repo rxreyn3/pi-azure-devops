@@ -23,6 +23,7 @@ import type {
 import type { RestClient } from "./rest.js";
 import { buildReadOnlyEndpoints } from "./endpoints.js";
 import { RestRequestError } from "./errors.js";
+import { DEFAULT_LOG_MAX_BYTES } from "./limits.js";
 
 function asObject(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") return undefined;
@@ -593,6 +594,28 @@ export interface DownloadArtifactZipResult {
   metadata: SanitizedArtifactDownloadMetadata;
 }
 
+export interface GetLogOptions {
+  /** Max characters returned to the caller (rest layer slices full body before returning). */
+  maxBytes?: number;
+  /** AzDO log line number to start at, inclusive (1-indexed). Bypasses head-only `maxBytes` truncation when paired with `endLine`. */
+  startLine?: number;
+  /** AzDO log line number to end at, inclusive (1-indexed). */
+  endLine?: number;
+}
+
+export interface LogFetchResult {
+  content: string;
+  /** Length (in JS string code units) of the response body the server returned for this URL (post-range, pre-slice). */
+  totalBytes: number;
+  /** Length of `content` (post-slice). Equal to `totalBytes` when `truncated` is false. */
+  returnedBytes: number;
+  /** True when `content` was head-truncated by `maxBytes`. */
+  truncated: boolean;
+  /** Echoed when the caller requested a line range. */
+  startLine?: number;
+  endLine?: number;
+}
+
 export interface AzureDevOpsClient {
   listPipelines(top?: number): Promise<PipelineSummary[]>;
   listBuilds(top?: number): Promise<BuildSummary[]>;
@@ -600,7 +623,7 @@ export interface AzureDevOpsClient {
   getRun(pipelineId: number, runId: number): Promise<RunSummary | undefined>;
   getTimeline(buildId: number): Promise<TimelineRecord[]>;
   listLogs(buildId: number): Promise<LogSummary[]>;
-  getLog(buildId: number, logId: number, maxBytes?: number): Promise<string>;
+  getLog(buildId: number, logId: number, opts?: GetLogOptions): Promise<LogFetchResult>;
   listArtifacts(buildId: number): Promise<ArtifactSummary[]>;
   resolveArtifactSource(input: ResolveArtifactSourceInput): Promise<ArtifactSourceResolution>;
   downloadArtifactZip(input: DownloadArtifactZipInput): Promise<DownloadArtifactZipResult>;
@@ -641,9 +664,21 @@ export function createAzureDevOpsClient(scope: AzureDevOpsScope, rest: RestClien
       return extractValueArray(response.data).map(normalizeLogSummary).filter((x): x is LogSummary => Boolean(x));
     },
 
-    async getLog(buildId: number, logId: number, maxBytes = 8_000): Promise<string> {
-      const response = await rest.getText(endpoints.getLog(buildId, logId), { maxBytes });
-      return response.data;
+    async getLog(buildId: number, logId: number, opts: GetLogOptions = {}): Promise<LogFetchResult> {
+      const maxBytes = opts.maxBytes ?? DEFAULT_LOG_MAX_BYTES;
+      const url = endpoints.getLog(buildId, logId, {
+        ...(opts.startLine !== undefined ? { startLine: opts.startLine } : {}),
+        ...(opts.endLine !== undefined ? { endLine: opts.endLine } : {}),
+      });
+      const response = await rest.getText(url, { maxBytes });
+      return {
+        content: response.data,
+        totalBytes: response.totalBytes,
+        returnedBytes: response.data.length,
+        truncated: response.truncated,
+        ...(opts.startLine !== undefined ? { startLine: opts.startLine } : {}),
+        ...(opts.endLine !== undefined ? { endLine: opts.endLine } : {}),
+      };
     },
 
     async listArtifacts(buildId: number): Promise<ArtifactSummary[]> {

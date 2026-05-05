@@ -386,12 +386,12 @@ async function run(): Promise<void> {
     });
   } else {
     try {
-      const text = await client.getLog(selected.buildId, selected.resolvedLogId, 8_000);
+      const result = await client.getLog(selected.buildId, selected.resolvedLogId, { maxBytes: 8_000 });
       operations.push({
         name: "getLog",
         status: statusFromMode,
         endpoint: endpoints.getLog(selected.buildId, selected.resolvedLogId),
-        itemCount: text.length,
+        itemCount: result.content.length,
       });
     } catch (error) {
       operations.push({

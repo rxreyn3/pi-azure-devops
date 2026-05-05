@@ -1,4 +1,5 @@
 import { redactSensitiveText } from "./redact.js";
+import { DEFAULT_LOG_MAX_BYTES, MAX_LOG_MAX_BYTES } from "./limits.js";
 import {
   buildSelectedLogInfo,
   resolveTimelineRecordLookups,
@@ -14,8 +15,9 @@ import type {
   TimelineRecord,
   TimelineSummary,
 } from "./models.js";
-const DEFAULT_MAX_BYTES = 8_000;
-const MAX_MAX_BYTES = 100_000;
+// Local aliases retain prior naming; the canonical caps live in `./limits.ts`.
+const DEFAULT_MAX_BYTES = DEFAULT_LOG_MAX_BYTES;
+const MAX_MAX_BYTES = MAX_LOG_MAX_BYTES;
 const DEFAULT_CONTEXT_LINES = 2;
 const DEFAULT_MAX_EXCERPTS = 5;
 
@@ -36,6 +38,8 @@ export interface BuildFailureDiagnosticsInput {
   taskName?: string;
   logId?: number;
   maxBytes?: number;
+  startLine?: number;
+  endLine?: number;
 }
 
 export interface TimelineRecordEvidence {
@@ -73,6 +77,13 @@ export interface BuildFailureDiagnosticsBundle {
     selectedLog?: LogSummary;
     maxBytesApplied: number;
     content?: string;
+    /** Length (in JS string code units) of the response body returned for the selected log URL (post-range). */
+    contentTotalBytes?: number;
+    /** True when `content` was head-truncated by `maxBytesApplied`. */
+    contentTruncated?: boolean;
+    /** Echoed when the caller requested a line range. */
+    contentStartLine?: number;
+    contentEndLine?: number;
     excerpts: LogExcerpt[];
   };
   artifacts: ArtifactSummary[];
@@ -223,7 +234,15 @@ export async function collectBuildFailureDiagnostics(
   });
 
   const selectedLog = selected.logId !== undefined ? logs.find((entry) => entry.id === selected.logId) : undefined;
-  const content = selected.logId !== undefined ? await client.getLog(input.buildId, selected.logId, maxBytesApplied) : undefined;
+  const logResult =
+    selected.logId !== undefined
+      ? await client.getLog(input.buildId, selected.logId, {
+          maxBytes: maxBytesApplied,
+          ...(input.startLine !== undefined ? { startLine: input.startLine } : {}),
+          ...(input.endLine !== undefined ? { endLine: input.endLine } : {}),
+        })
+      : undefined;
+  const content = logResult?.content;
   const excerpts = content ? extractLogExcerpts(content) : [];
 
   const failedRecords = timelineRecords
@@ -256,6 +275,10 @@ export async function collectBuildFailureDiagnostics(
       ...(selectedLog ? { selectedLog } : {}),
       maxBytesApplied,
       ...(content !== undefined ? { content } : {}),
+      ...(logResult !== undefined ? { contentTotalBytes: logResult.totalBytes } : {}),
+      ...(logResult !== undefined ? { contentTruncated: logResult.truncated } : {}),
+      ...(input.startLine !== undefined ? { contentStartLine: input.startLine } : {}),
+      ...(input.endLine !== undefined ? { contentEndLine: input.endLine } : {}),
       excerpts,
     },
     artifacts,

@@ -538,3 +538,111 @@ test("pi-ado artifacts download refuses to overwrite existing file without --ove
   assert.equal(code, 1);
   assert.match(stderrCapture.getOutput(), /Refusing to overwrite/);
 });
+
+test("pi-ado logs --mock --max-bytes truncates content and reports contentTruncated/contentTotalBytes", async () => {
+  const stdoutCapture = createCapture();
+  const stderrCapture = createCapture();
+
+  const code = await runCli(
+    [
+      "logs",
+      "--mock",
+      "--build-id",
+      "202",
+      "--task-name",
+      "Run Linter",
+      "--max-bytes",
+      "30",
+      "--json",
+    ],
+    {
+      stdout: stdoutCapture.stream,
+      stderr: stderrCapture.stream,
+      env: {},
+      cwd: process.cwd(),
+    },
+  );
+
+  assert.equal(code, 0);
+  assert.equal(stderrCapture.getOutput(), "");
+
+  const parsed = JSON.parse(stdoutCapture.getOutput()) as {
+    content?: string;
+    contentTotalBytes?: number;
+    contentTruncated?: boolean;
+  };
+  assert.equal(typeof parsed.content, "string");
+  assert.equal((parsed.content ?? "").length, 30);
+  assert.equal(parsed.contentTruncated, true);
+  assert.equal(typeof parsed.contentTotalBytes, "number");
+  assert.equal(parsed.contentTotalBytes! > 30, true);
+});
+
+test("pi-ado logs --mock with sufficient --max-bytes reports contentTruncated=false", async () => {
+  const stdoutCapture = createCapture();
+  const stderrCapture = createCapture();
+
+  const code = await runCli(
+    [
+      "logs",
+      "--mock",
+      "--build-id",
+      "202",
+      "--task-name",
+      "Run Linter",
+      "--max-bytes",
+      "100000",
+      "--json",
+    ],
+    {
+      stdout: stdoutCapture.stream,
+      stderr: stderrCapture.stream,
+      env: {},
+      cwd: process.cwd(),
+    },
+  );
+
+  assert.equal(code, 0);
+  const parsed = JSON.parse(stdoutCapture.getOutput()) as {
+    content?: string;
+    contentTotalBytes?: number;
+    contentTruncated?: boolean;
+  };
+  assert.equal(parsed.contentTruncated, false);
+  assert.equal((parsed.content ?? "").length, parsed.contentTotalBytes);
+});
+
+test("pi-ado logs --mock --start-line and --end-line echo into the payload", async () => {
+  const stdoutCapture = createCapture();
+  const stderrCapture = createCapture();
+
+  const code = await runCli(
+    [
+      "logs",
+      "--mock",
+      "--build-id",
+      "202",
+      "--task-name",
+      "Run Linter",
+      "--start-line",
+      "100",
+      "--end-line",
+      "200",
+      "--json",
+    ],
+    {
+      stdout: stdoutCapture.stream,
+      stderr: stderrCapture.stream,
+      env: {},
+      cwd: process.cwd(),
+    },
+  );
+
+  assert.equal(code, 0);
+  const parsed = JSON.parse(stdoutCapture.getOutput()) as {
+    contentStartLine?: number;
+    contentEndLine?: number;
+  };
+  assert.equal(parsed.contentStartLine, 100);
+  assert.equal(parsed.contentEndLine, 200);
+});

@@ -249,6 +249,9 @@ async function runLogs(flags: Record<string, string | boolean>, context: CliCont
 
   const buildId = parsePositiveIntegerStrict(buildIdRaw, "--build-id");
   const explicitLogId = flagNumber(flags, "log-id");
+  const maxBytes = flagNumber(flags, "max-bytes");
+  const startLine = flagNumber(flags, "start-line");
+  const endLine = flagNumber(flags, "end-line");
   const jobId = flagString(flags, "job-id");
   const taskId = flagString(flags, "task-id");
   const stageId = flagString(flags, "stage-id");
@@ -280,14 +283,27 @@ async function runLogs(flags: Record<string, string | boolean>, context: CliCont
   const selected = buildSelectedLogInfo(lookups, selectedRaw);
 
   let content: string | undefined;
+  let contentTotalBytes: number | undefined;
+  let contentTruncated: boolean | undefined;
   if (selected.resolvedLogId !== undefined) {
-    content = await client.getLog(buildId, selected.resolvedLogId, 8_000);
+    const result = await client.getLog(buildId, selected.resolvedLogId, {
+      ...(maxBytes !== undefined ? { maxBytes } : {}),
+      ...(startLine !== undefined ? { startLine } : {}),
+      ...(endLine !== undefined ? { endLine } : {}),
+    });
+    content = result.content;
+    contentTotalBytes = result.totalBytes;
+    contentTruncated = result.truncated;
   }
 
   const payload = {
     logs,
     selected,
     content,
+    ...(contentTotalBytes !== undefined ? { contentTotalBytes } : {}),
+    ...(contentTruncated !== undefined ? { contentTruncated } : {}),
+    ...(startLine !== undefined ? { contentStartLine: startLine } : {}),
+    ...(endLine !== undefined ? { contentEndLine: endLine } : {}),
   };
 
   writeOutput(context, isJson(flags), payload);
@@ -302,6 +318,8 @@ async function runDiagnose(flags: Record<string, string | boolean>, context: Cli
   const buildId = parsePositiveIntegerStrict(buildIdRaw, "--build-id");
   const explicitLogId = flagNumber(flags, "log-id");
   const maxBytes = flagNumber(flags, "max-bytes");
+  const startLine = flagNumber(flags, "start-line");
+  const endLine = flagNumber(flags, "end-line");
   const jobId = flagString(flags, "job-id");
   const taskId = flagString(flags, "task-id");
   const stageId = flagString(flags, "stage-id");
@@ -321,6 +339,8 @@ async function runDiagnose(flags: Record<string, string | boolean>, context: Cli
     ...(taskName !== undefined ? { taskName } : {}),
     ...(explicitLogId !== undefined ? { logId: explicitLogId } : {}),
     ...(maxBytes !== undefined ? { maxBytes } : {}),
+    ...(startLine !== undefined ? { startLine } : {}),
+    ...(endLine !== undefined ? { endLine } : {}),
   });
 
   const payload = {
@@ -426,8 +446,8 @@ function usage(): string {
     "Usage:",
     "  pi-ado doctor [--json] [--mock] [--organization <org>] [--project <project>]",
     "  pi-ado status --build-id <id> [--stage-id <guid>] [--stage-name <name>] [--job-id <guid>] [--job-name <name>] [--task-id <guid>] [--task-name <name>] [--json] [--mock]",
-    "  pi-ado logs --build-id <id> [--stage-id <guid>] [--stage-name <name>] [--job-id <guid>] [--job-name <name>] [--task-id <guid>] [--task-name <name>] [--log-id <id>] [--json] [--mock]",
-    "  pi-ado diagnose --build-id <id> [--stage-id <guid>] [--stage-name <name>] [--job-id <guid>] [--job-name <name>] [--task-id <guid>] [--task-name <name>] [--log-id <id>] [--max-bytes <n>] [--json] [--mock]",
+    "  pi-ado logs --build-id <id> [--stage-id <guid>] [--stage-name <name>] [--job-id <guid>] [--job-name <name>] [--task-id <guid>] [--task-name <name>] [--log-id <id>] [--max-bytes <n>] [--start-line <n>] [--end-line <n>] [--json] [--mock]",
+    "  pi-ado diagnose --build-id <id> [--stage-id <guid>] [--stage-name <name>] [--job-id <guid>] [--job-name <name>] [--task-id <guid>] [--task-name <name>] [--log-id <id>] [--max-bytes <n>] [--start-line <n>] [--end-line <n>] [--json] [--mock]",
     "  pi-ado artifacts --build-id <id> [--json] [--mock]",
     "  pi-ado artifacts download --build-id <id> --artifact-name <name> --output <path> --confirm [--extract] [--overwrite] [--max-bytes <n>] [--artifact-kind auto|build|pipeline] [--pipeline-id <id>] [--run-id <id>] [--json] [--mock]",
     "",

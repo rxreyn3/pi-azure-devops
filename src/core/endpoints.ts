@@ -76,8 +76,18 @@ export function buildReadOnlyEndpoints(scope: Pick<AzureDevOpsScope, "organizati
       `${base}/_apis/build/builds/${buildId}/timeline?api-version=${encodeURIComponent(apiVersion)}`,
     listLogs: (buildId: number, apiVersion = API_VERSION_DEFAULT) =>
       `${base}/_apis/build/builds/${buildId}/logs?api-version=${encodeURIComponent(apiVersion)}`,
-    getLog: (buildId: number, logId: number, apiVersion = API_VERSION_DEFAULT) =>
-      `${base}/_apis/build/builds/${buildId}/logs/${logId}?api-version=${encodeURIComponent(apiVersion)}`,
+    getLog: (
+      buildId: number,
+      logId: number,
+      opts: { startLine?: number; endLine?: number; apiVersion?: string } = {},
+    ) => {
+      const apiVersion = opts.apiVersion ?? API_VERSION_DEFAULT;
+      const params = new URLSearchParams();
+      if (opts.startLine !== undefined) params.set("startLine", String(opts.startLine));
+      if (opts.endLine !== undefined) params.set("endLine", String(opts.endLine));
+      params.set("api-version", apiVersion);
+      return `${base}/_apis/build/builds/${buildId}/logs/${logId}?${params.toString()}`;
+    },
     listArtifacts: (buildId: number, apiVersion = API_VERSION_DEFAULT) =>
       `${base}/_apis/build/builds/${buildId}/artifacts?api-version=${encodeURIComponent(apiVersion)}`,
     getBuildArtifact: (buildId: number, artifactName: string, apiVersion = API_VERSION_DEFAULT) =>
