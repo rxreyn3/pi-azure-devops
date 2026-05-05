@@ -1,0 +1,20 @@
+{
+  "$schema": "https://charm.land/crush.json",
+  "lsp": {
+    "typescript": {
+      "command": "./node_modules/.bin/typescript-language-server",
+      "args": ["--stdio"],
+      "filetypes": ["typescript", "typescriptreact", "javascript", "javascriptreact"],
+      "root_markers": ["tsconfig.json", "package.json"]
+    },
+    "json": {
+      "command": "./node_modules/.bin/vscode-json-language-server",
+      "args": ["--stdio"],
+      "filetypes": ["json", "jsonc"],
+      "root_markers": ["package.json"]
+    }
+  },
+  "options": {
+    "auto_lsp": true
+  }
+}
