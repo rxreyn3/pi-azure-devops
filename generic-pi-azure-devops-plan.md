@@ -8,7 +8,7 @@ This document is planning only. It does not authorize source, prompt, docs,
 package manifest, or test changes. Implementation of any phase below requires
 an explicit follow-up session.
 
-## 1. Current state (delivered through Phase 7C)
+## 1. Current state (delivered through Phase 7D)
 
 `pi-azure-devops` is a generic, REST-first Azure DevOps integration package
 for Pi. It is not a repo-specific ShotGrid helper.
@@ -60,10 +60,14 @@ Delivered scope:
 - Docs and prompts state that remote mutation is not implemented.
 - Tests assert the read-only / local-write tool partition and that
   remote-mutation tool names remain absent.
-- Package metadata is prepared for manual-first public npm publication as
+- Package metadata is prepared for public npm publication as
   `@rxreyn3/pi-azure-devops`, with built `dist/`, skills, prompts, docs,
   examples, README, LICENSE, and CHANGELOG included by the package allow-list.
-  Publication and consuming-project installation remain manual external steps.
+- GitHub Actions publication path is present:
+  - `.github/workflows/ci.yml` verifies pushes and pull requests to `main`.
+  - `.github/workflows/publish-npm.yml` publishes from GitHub releases using
+    npm trusted publishing/OIDC, Node 24, `id-token: write`, and the
+    `npm-production` environment gate.
 
 ## 2. Known remaining work
 
@@ -79,7 +83,8 @@ User-selected order:
 1. Finish read-only UX (display-name selectors). [delivered Phase 7A]
 2. Local artifact download / write / extract. [delivered Phase 7B]
 3. Public npm publication and OMP install testing. [delivered Phase 7C]
-4. Remote mutation with fail-closed gates. [next: Phase 8]
+4. GitHub Actions trusted-publishing release pipeline. [delivered Phase 7D]
+5. Remote mutation with fail-closed gates. [next: Phase 8]
 
 Rationale: surface-area and blast radius grow monotonically. Read-only name
 lookup adds zero side effects, local download adds filesystem writes only,
@@ -243,8 +248,9 @@ OMP/consumer installation before remote Azure DevOps mutation work.
 - GitHub namespace: `rxreyn3`.
 - Package name: `@rxreyn3/pi-azure-devops`.
 - Publish target: public npm registry (`https://registry.npmjs.org`).
-- Release automation is manual-first; no automated publish job is added in
-  this phase.
+- Release automation is manual-first in this phase; the repository metadata,
+  package allow-list, and local tarball validation are prepared before adding
+  a dedicated GitHub Actions publish workflow.
 - Do not implement remote Azure DevOps mutation commands, tools, prompts,
   transports, or behavior.
 - Do not commit GitHub/npm/Azure DevOps tokens, `.env` files, tokenized
@@ -254,7 +260,7 @@ OMP/consumer installation before remote Azure DevOps mutation work.
 - Package contents must include built `dist/`, `skills/`, `prompts/`, `docs/`,
   `examples/`, `README.md`, `LICENSE`, and `CHANGELOG.md`.
 
-### Manual-first publication and install flow
+### Manual-first publication and install preparation
 
 1. Prepare package metadata, lifecycle scripts, and package allow-list locally.
 2. Run `npm test`, `npm run typecheck`, and `npm run build`.
@@ -264,8 +270,9 @@ OMP/consumer installation before remote Azure DevOps mutation work.
 5. Confirm installed `package.json` still exposes `pi.extensions`, `pi.skills`,
    and `pi.prompts` metadata pointing at installed files.
 6. Only after local tarball install passes, manually create/push the GitHub
-   repository, authenticate to npm outside the repo, publish with `npm publish`,
-   and install/test in OMP or another consumer project.
+   repository, authenticate to npm outside the repo if local publication is
+   chosen, publish with `npm publish`, and install/test in OMP or another
+   consumer project.
 
 ### Critical files (Phase 7C)
 
@@ -286,6 +293,58 @@ OMP/consumer installation before remote Azure DevOps mutation work.
 - `npm pack --dry-run`, confirming required runtime files are included and
   `src/`, `test/`, `spikes/`, local scratch files, and secret-bearing files are excluded.
 - `npm pack` followed by a temporary-project tarball install and mock CLI smoke test.
+
+---
+
+## Phase 7D — GitHub Actions npm trusted-publishing pipeline
+
+Purpose: add a simple, manual-release-triggered GitHub Actions path for public
+npm publication before Phase 8 remote Azure DevOps mutation work begins.
+
+### Requirements
+
+- Keep publication human-initiated through a GitHub release, not automatic on
+  every merge.
+- Use npm trusted publishing/OIDC instead of a committed `.npmrc` or
+  long-lived `NPM_TOKEN` fallback.
+- Use GitHub-hosted `ubuntu-latest` runners.
+- Verify the package on Node 20 in CI to preserve the declared runtime floor.
+- Publish on Node 24 so npm trusted-publishing requirements are satisfied.
+- Set publish-job permissions to `contents: read` and `id-token: write`.
+- Use the `npm-production` environment so GitHub environment protection can
+  add an approval gate.
+- Fail closed when the GitHub release tag is not exactly
+  `v<package.json version>`.
+- Fail closed when the target npm package version is already published.
+- Run `npm ci`, `npm test`, `npm run typecheck`, `npm run build`, and
+  `npm pack --dry-run` before publication.
+- Publish with `npm publish --access public`.
+
+### Critical files (Phase 7D)
+
+- `.github/workflows/ci.yml`
+- `.github/workflows/publish-npm.yml`
+- `docs/publication.md`
+- `README.md`
+- `generic-pi-azure-devops-plan.md`
+
+### External setup required
+
+- Configure npm trusted publishing for package `@rxreyn3/pi-azure-devops`
+  with GitHub owner/user `rxreyn3`, repository `pi-azure-devops`, workflow
+  filename `publish-npm.yml`, and environment `npm-production`.
+- Optionally protect the GitHub `npm-production` environment with required
+  reviewers before publishing the release.
+
+### Verification required
+
+- `npm test`
+- `npm run typecheck`
+- `npm run build`
+- `npm pack --dry-run`
+- Workflow review confirming no committed secrets, no token fallback, release
+  trigger only, minimal permissions, tag/version guard, duplicate-version
+  guard, and trusted-publishing-compatible Node/npm configuration.
 
 ---
 

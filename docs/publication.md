@@ -1,33 +1,57 @@
 # npm publication runbook
 
-This runbook is manual-first. It prepares and validates `@rxreyn3/pi-azure-devops` for publication to the public npm registry and OMP/consumer installation before any Azure DevOps remote-mutation work begins.
+This runbook validates and publishes `@rxreyn3/pi-azure-devops` to the public npm registry from GitHub Actions using npm trusted publishing. Publication remains manual-triggered by a GitHub release; Azure DevOps remote queue/cancel/rerun mutation work remains out of scope.
 
 ## Safety boundaries
 
 - Do not implement or expose Azure DevOps queue/cancel/rerun/preview mutation commands, tools, prompts, or transports as part of publication.
 - Do not commit npm tokens, GitHub tokens, Azure DevOps PATs, `.env` files, or tokenized `.npmrc` entries.
 - Do not add a committed registry override for `@rxreyn3`; consumers should be able to run plain `npm install @rxreyn3/pi-azure-devops` from the public npm registry.
-- Keep token-bearing npm authentication in user-level config, a temporary shell environment, or another environment-specific secret store outside the repo.
-- Do not paste tokens into logs, docs examples, package metadata, or issue text.
+- Use npm trusted publishing/OIDC for GitHub Actions publication. Do not add an `NPM_TOKEN` fallback unless trusted publishing is explicitly rejected in a future decision.
+- Keep any manual npm authentication in user-level config, a temporary shell environment, or another environment-specific secret store outside the repo.
+- Do not paste tokens into logs, docs examples, package metadata, release text, or issue text.
 - Existing signed Azure DevOps artifact URL redaction and PAT-handling rules remain unchanged.
 
-## Manual publication steps
+## GitHub Actions release pipeline
 
-1. Ensure the GitHub repository exists and is pushed: `rxreyn3/pi-azure-devops`.
-2. Authenticate to npm outside the repository:
+The repository contains two workflows:
+
+- `.github/workflows/ci.yml` runs on pushes and pull requests to `main` with Node 20. It runs `npm ci`, `npm test`, `npm run typecheck`, `npm run build`, and `npm pack --dry-run`.
+- `.github/workflows/publish-npm.yml` runs only when a GitHub release is published. It uses Node 24, GitHub OIDC permission `id-token: write`, environment `npm-production`, the same verification gates as CI, a release-tag/package-version check, an npm registry duplicate-version check, and `npm publish --access public`.
+
+The publish workflow commits no `.npmrc` and uses no long-lived npm token. npm trusted publishing must be configured on npm before the first release-triggered publish.
+
+## One-time external setup
+
+1. Confirm the GitHub repository exists and is pushed: `rxreyn3/pi-azure-devops`.
+2. In GitHub, optionally create an environment named `npm-production` and add required reviewers. If configured, this adds a manual approval gate before the publish job runs.
+3. On npmjs.com, configure trusted publishing for package `@rxreyn3/pi-azure-devops`:
+
+   - Publisher: GitHub Actions
+   - Organization or user: `rxreyn3`
+   - Repository: `pi-azure-devops`
+   - Workflow filename: `publish-npm.yml`
+   - Environment name: `npm-production`
+
+4. Leave token publishing disabled for the workflow. If trusted publishing is unavailable for this package/account, stop and choose explicitly between protected-token publication and the manual local flow; do not silently add a token fallback.
+
+## Version bump and local verification
+
+1. Choose a new package version that has never been published to npm.
+2. Update both `package.json` and `package-lock.json`:
 
    ```bash
-   npm login
-   npm whoami --registry=https://registry.npmjs.org
+   npm version <patch|minor|major|prerelease> --no-git-tag-version
    ```
 
-3. Verify package name/version availability before publishing:
+3. Verify that npm does not already have the target version:
 
    ```bash
-   npm view @rxreyn3/pi-azure-devops@0.1.1 version --registry=https://registry.npmjs.org
+   PACKAGE_VERSION=$(node -p "require('./package.json').version")
+   npm view "@rxreyn3/pi-azure-devops@$PACKAGE_VERSION" version --registry=https://registry.npmjs.org/
    ```
 
-   If npm returns a version, bump to the next patch or prerelease before publishing. npm package versions cannot be reused once published.
+   If npm returns a version, choose a different version. npm package versions cannot be reused once published.
 
 4. Verify the package locally:
 
@@ -35,13 +59,10 @@ This runbook is manual-first. It prepares and validates `@rxreyn3/pi-azure-devop
    npm test
    npm run typecheck
    npm run build
-   ```
-
-5. Inspect the package contents without creating a tarball:
-
-   ```bash
    npm pack --dry-run
    ```
+
+5. Inspect the package contents reported by `npm pack --dry-run`.
 
    Required included files include:
 
@@ -60,42 +81,49 @@ This runbook is manual-first. It prepares and validates `@rxreyn3/pi-azure-devop
 
    Expected exclusions include `src/`, `test/`, `spikes/`, `.crush/`, `.vscode/`, local scratch files, committed `.npmrc`, and any secret-bearing config.
 
-6. Create the tarball and install it into a temporary project outside this repo:
+## Release publication
+
+1. Commit and push the version bump and any release notes.
+2. Create and push a tag that exactly matches the package version with a `v` prefix:
 
    ```bash
-   npm pack
-   mkdir -p /tmp/pi-azure-devops-install-smoke
-   cd /tmp/pi-azure-devops-install-smoke
-   npm init -y
-   npm install /path/to/rxreyn3-pi-azure-devops-0.1.1.tgz
-   ./node_modules/.bin/pi-ado doctor --mock --json
+   PACKAGE_VERSION=$(node -p "require('./package.json').version")
+   git tag "v$PACKAGE_VERSION"
+   git push origin "v$PACKAGE_VERSION"
    ```
 
-7. Inspect installed package metadata in the temporary project and confirm:
+3. Create and publish a GitHub release for that exact tag.
+4. In GitHub Actions, verify that `Publish npm package` starts from the release event.
+5. If `npm-production` has required reviewers, approve the environment deployment only after confirming the release tag and package version.
+6. Let the workflow complete. It must fail closed if the release tag is not `v<package.json version>` or if the package version is already published.
 
-   - `pi.extensions` points at `./dist/extension/index.js`.
-   - `pi.skills` points at `./skills`.
-   - `pi.prompts` points at the installed prompt markdown files.
+## Post-publication verification
 
-8. Publish manually only after the tarball install smoke test passes:
+1. Confirm npm reports the published version:
 
    ```bash
-   npm publish
+   npm view @rxreyn3/pi-azure-devops version --registry=https://registry.npmjs.org/
    ```
 
-   `publishConfig.access` is set to `public` so the scoped package publishes as public on npm without requiring `--access public`.
-
-9. In OMP or another consumer project, install and smoke-test from the public npm registry:
+2. In a fresh consumer project, install and smoke-test from the public registry:
 
    ```bash
    npm install @rxreyn3/pi-azure-devops
    ./node_modules/.bin/pi-ado doctor --mock --json
    ```
 
-10. Run manual live tests only with existing read-only or local-write-gated operations:
+3. In OMP, install and smoke-test the plugin:
 
-    - Read-only diagnostics/status/log/artifact metadata commands.
-    - Artifact download preview without `--confirm` first.
-    - Local artifact download/extract only after reviewing preview and supplying the explicit confirmation flag.
+   ```bash
+   omp plugin install @rxreyn3/pi-azure-devops
+   omp plugin doctor --json
+   pi-ado doctor --mock --json
+   ```
 
-Do not proceed to Phase 8 remote mutation work until package tarball installation and OMP/consumer discovery have been validated from the public npm package.
+4. Run live checks only with existing read-only or local-write-gated operations:
+
+   - Read-only diagnostics/status/log/artifact metadata commands.
+   - Artifact download preview without `--confirm` first.
+   - Local artifact download/extract only after reviewing preview and supplying the explicit confirmation flag.
+
+Do not proceed to Phase 8 remote mutation work until the GitHub Actions publication job and public-registry OMP/consumer install checks have passed.
