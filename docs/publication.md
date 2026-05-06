@@ -1,6 +1,6 @@
 # npm publication runbook
 
-This runbook validates and publishes `@rxreyn3/pi-azure-devops` to the public npm registry from GitHub Actions using npm trusted publishing. Publication remains manual-triggered by a GitHub release; Azure DevOps remote queue/cancel/rerun mutation work remains out of scope.
+This runbook validates and publishes `@rxreyn3/pi-azure-devops` to the public npm registry from a manually dispatched GitHub Actions workflow using npm trusted publishing. Publication is button-triggered and environment-gated; Azure DevOps remote queue/cancel/rerun mutation work remains out of scope.
 
 ## Safety boundaries
 
@@ -9,17 +9,17 @@ This runbook validates and publishes `@rxreyn3/pi-azure-devops` to the public np
 - Do not add a committed registry override for `@rxreyn3`; consumers should be able to run plain `npm install @rxreyn3/pi-azure-devops` from the public npm registry.
 - Use npm trusted publishing/OIDC for GitHub Actions publication. Do not add an `NPM_TOKEN` fallback unless trusted publishing is explicitly rejected in a future decision.
 - Keep any manual npm authentication in user-level config, a temporary shell environment, or another environment-specific secret store outside the repo.
-- Do not paste tokens into logs, docs examples, package metadata, release text, or issue text.
+- Do not paste tokens into logs, docs examples, package metadata, workflow text, or issue text.
 - Existing signed Azure DevOps artifact URL redaction and PAT-handling rules remain unchanged.
 
-## GitHub Actions release pipeline
+## GitHub Actions publication pipeline
 
 The repository contains two workflows:
 
 - `.github/workflows/ci.yml` runs on pushes and pull requests to `main` with Node 20. It runs `npm ci`, `npm test`, `npm run typecheck`, `npm run build`, and `npm pack --dry-run`.
-- `.github/workflows/publish-npm.yml` runs only when a GitHub release is published. It uses Node 24, GitHub OIDC permission `id-token: write`, environment `npm-production`, the same verification gates as CI, a release-tag/package-version check, an npm registry duplicate-version check, and `npm publish --access public`.
+- `.github/workflows/publish-npm.yml` is manually started with GitHub Actions `workflow_dispatch`. It requires a `patch`, `minor`, or `major` bump choice, runs only from `main`, uses Node 24, has GitHub OIDC permission `id-token: write`, uses environment `npm-production`, bumps and commits `package.json` / `package-lock.json`, creates and pushes the matching `vX.Y.Z` tag atomically, runs the same verification gates as CI, checks npm for duplicate versions, and publishes with `npm publish --access public`.
 
-The publish workflow commits no `.npmrc` and uses no long-lived npm token. npm trusted publishing must be configured on npm before the first release-triggered publish.
+The publish workflow commits no `.npmrc` and uses no long-lived npm token. npm trusted publishing must be configured on npm before using the button workflow.
 
 ## One-time external setup
 
@@ -35,67 +35,34 @@ The publish workflow commits no `.npmrc` and uses no long-lived npm token. npm t
 
 4. Leave token publishing disabled for the workflow. If trusted publishing is unavailable for this package/account, stop and choose explicitly between protected-token publication and the manual local flow; do not silently add a token fallback.
 
-## Version bump and local verification
+## Button publication flow
 
-1. Choose a new package version that has never been published to npm.
-2. Update both `package.json` and `package-lock.json`:
+1. Merge normal development through pull requests to `main`.
+2. Wait for `CI` to pass on `main`.
+3. Open the GitHub Actions workflow: `Publish npm package`.
+4. Select `Run workflow` on branch `main`.
+5. Choose the version bump:
 
-   ```bash
-   npm version <patch|minor|major|prerelease> --no-git-tag-version
-   ```
+   - `patch` for compatible fixes and small improvements.
+   - `minor` for backward-compatible feature additions.
+   - `major` for breaking changes.
 
-3. Verify that npm does not already have the target version:
+6. Start the workflow.
+7. If `npm-production` has required reviewers, approve the environment deployment only after confirming the selected bump and current `main` state.
+8. Let the workflow complete. It must fail closed if it is not run from `main`, if the computed package version is already published, if the matching Git tag already exists, or if verification fails.
 
-   ```bash
-   PACKAGE_VERSION=$(node -p "require('./package.json').version")
-   npm view "@rxreyn3/pi-azure-devops@$PACKAGE_VERSION" version --registry=https://registry.npmjs.org/
-   ```
+The workflow performs these actions after approval:
 
-   If npm returns a version, choose a different version. npm package versions cannot be reused once published.
+1. Installs dependencies with `npm ci`.
+2. Runs `npm version <bump> --no-git-tag-version`.
+3. Verifies the computed `@rxreyn3/pi-azure-devops@X.Y.Z` version is unpublished.
+4. Verifies tag `vX.Y.Z` does not already exist.
+5. Runs `npm test`, `npm run typecheck`, `npm run build`, and `npm pack --dry-run`.
+6. Commits `package.json` and `package-lock.json` with message `Bump package version to X.Y.Z`.
+7. Tags the same commit as `vX.Y.Z` and pushes the commit and tag atomically.
+8. Publishes to npm with trusted publishing/OIDC.
 
-4. Verify the package locally:
-
-   ```bash
-   npm test
-   npm run typecheck
-   npm run build
-   npm pack --dry-run
-   ```
-
-5. Inspect the package contents reported by `npm pack --dry-run`.
-
-   Required included files include:
-
-   - `dist/cli/index.js`
-   - `dist/extension/index.js`
-   - `dist/fixtures/build-get.json`
-   - `skills/azure-devops/SKILL.md`
-   - `prompts/ado-doctor.md`
-   - `prompts/ado-status.md`
-   - `prompts/ado-logs.md`
-   - `prompts/ado-artifacts.md`
-   - `prompts/ado-diagnose.md`
-   - `README.md`
-   - `LICENSE`
-   - `CHANGELOG.md`
-
-   Expected exclusions include `src/`, `test/`, `spikes/`, `.crush/`, `.vscode/`, local scratch files, committed `.npmrc`, and any secret-bearing config.
-
-## Release publication
-
-1. Commit and push the version bump and any release notes.
-2. Create and push a tag that exactly matches the package version with a `v` prefix:
-
-   ```bash
-   PACKAGE_VERSION=$(node -p "require('./package.json').version")
-   git tag "v$PACKAGE_VERSION"
-   git push origin "v$PACKAGE_VERSION"
-   ```
-
-3. Create and publish a GitHub release for that exact tag.
-4. In GitHub Actions, verify that `Publish npm package` starts from the release event.
-5. If `npm-production` has required reviewers, approve the environment deployment only after confirming the release tag and package version.
-6. Let the workflow complete. It must fail closed if the release tag is not `v<package.json version>` or if the package version is already published.
+Do not create a separate manual version-bump commit or GitHub release for routine publication. Use the button workflow so the version bump, tag, verification, and npm publish stay in one audited run.
 
 ## Post-publication verification
 

@@ -70,7 +70,7 @@ Consumer smoke checks:
 2. Confirm OMP can discover `pi.extensions`, `pi.skills`, and `pi.prompts` from `node_modules/@rxreyn3/pi-azure-devops/package.json`.
 3. Confirm installed metadata paths resolve to `dist/extension/index.js`, `skills/`, and the prompt markdown files inside the installed package.
 
-GitHub Actions release publication and live-install steps are documented in `docs/publication.md`. Remote queue/cancel/rerun mutation remains not implemented.
+GitHub Actions button publication and live-install steps are documented in `docs/publication.md`. Remote queue/cancel/rerun mutation remains not implemented.
 
 ## CLI (`pi-ado`) read-only commands
 

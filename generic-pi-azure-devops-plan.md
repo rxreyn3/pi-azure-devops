@@ -65,9 +65,9 @@ Delivered scope:
   examples, README, LICENSE, and CHANGELOG included by the package allow-list.
 - GitHub Actions publication path is present:
   - `.github/workflows/ci.yml` verifies pushes and pull requests to `main`.
-  - `.github/workflows/publish-npm.yml` publishes from GitHub releases using
-    npm trusted publishing/OIDC, Node 24, `id-token: write`, and the
-    `npm-production` environment gate.
+  - `.github/workflows/publish-npm.yml` publishes from a manual GitHub Actions
+    button using npm trusted publishing/OIDC, Node 24, `contents: write`,
+    `id-token: write`, and the `npm-production` environment gate.
 
 ## 2. Known remaining work
 
@@ -298,26 +298,30 @@ OMP/consumer installation before remote Azure DevOps mutation work.
 
 ## Phase 7D — GitHub Actions npm trusted-publishing pipeline
 
-Purpose: add a simple, manual-release-triggered GitHub Actions path for public
-npm publication before Phase 8 remote Azure DevOps mutation work begins.
+Purpose: add a simple, button-triggered GitHub Actions path for public npm
+publication before Phase 8 remote Azure DevOps mutation work begins.
 
 ### Requirements
 
-- Keep publication human-initiated through a GitHub release, not automatic on
-  every merge.
+- Keep publication human-initiated through GitHub Actions `workflow_dispatch`,
+  not automatic on every merge.
 - Use npm trusted publishing/OIDC instead of a committed `.npmrc` or
   long-lived `NPM_TOKEN` fallback.
 - Use GitHub-hosted `ubuntu-latest` runners.
 - Verify the package on Node 20 in CI to preserve the declared runtime floor.
 - Publish on Node 24 so npm trusted-publishing requirements are satisfied.
-- Set publish-job permissions to `contents: read` and `id-token: write`.
+- Set publish-job permissions to `contents: write` and `id-token: write` so
+  the workflow can commit the version bump, create the tag, and publish by OIDC.
 - Use the `npm-production` environment so GitHub environment protection can
   add an approval gate.
-- Fail closed when the GitHub release tag is not exactly
-  `v<package.json version>`.
-- Fail closed when the target npm package version is already published.
+- Provide `patch`, `minor`, and `major` bump choices.
+- Fail closed unless the workflow is run from `main`.
+- Fail closed when the computed target npm package version is already published.
+- Fail closed when the matching `v<package.json version>` tag already exists.
 - Run `npm ci`, `npm test`, `npm run typecheck`, `npm run build`, and
   `npm pack --dry-run` before publication.
+- Commit `package.json` and `package-lock.json`, tag the same commit as
+  `v<package.json version>`, and push the commit and tag atomically.
 - Publish with `npm publish --access public`.
 
 ### Critical files (Phase 7D)
@@ -334,7 +338,7 @@ npm publication before Phase 8 remote Azure DevOps mutation work begins.
   with GitHub owner/user `rxreyn3`, repository `pi-azure-devops`, workflow
   filename `publish-npm.yml`, and environment `npm-production`.
 - Optionally protect the GitHub `npm-production` environment with required
-  reviewers before publishing the release.
+  reviewers before approving publication.
 
 ### Verification required
 
@@ -342,9 +346,10 @@ npm publication before Phase 8 remote Azure DevOps mutation work begins.
 - `npm run typecheck`
 - `npm run build`
 - `npm pack --dry-run`
-- Workflow review confirming no committed secrets, no token fallback, release
-  trigger only, minimal permissions, tag/version guard, duplicate-version
-  guard, and trusted-publishing-compatible Node/npm configuration.
+- Workflow review confirming no committed secrets, no token fallback,
+  `workflow_dispatch` trigger only, `main` branch guard, environment gate,
+  duplicate-version guard, duplicate-tag guard, atomic commit/tag push, and
+  trusted-publishing-compatible Node/npm configuration.
 
 ---
 
