@@ -1,7 +1,14 @@
 {
   "name": "@rxreyn3/pi-azure-devops",
   "version": "0.1.2",
-  "description": "Generic REST-first Azure DevOps package skeleton for Pi",
+  "description": "Azure DevOps diagnostics extension and CLI for Pi/OMP",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "omp-plugin",
+    "azure-devops",
+    "diagnostics"
+  ],
   "license": "MIT",
   "author": "rxreyn3",
   "repository": {
