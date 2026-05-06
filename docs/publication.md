@@ -1,21 +1,34 @@
-# GitHub Packages publication runbook
+# npm publication runbook
 
-This runbook is manual-first. It prepares and validates `@rxreyn3/pi-azure-devops` for GitHub Packages publication and OMP/consumer installation before any Azure DevOps remote-mutation work begins.
+This runbook is manual-first. It prepares and validates `@rxreyn3/pi-azure-devops` for publication to the public npm registry and OMP/consumer installation before any Azure DevOps remote-mutation work begins.
 
 ## Safety boundaries
 
 - Do not implement or expose Azure DevOps queue/cancel/rerun/preview mutation commands, tools, prompts, or transports as part of publication.
-- Do not commit GitHub PATs, npm tokens, Azure DevOps PATs, `.env` files, or tokenized `.npmrc` entries.
-- The committed root `.npmrc` may contain only the safe scope mapping: `@rxreyn3:registry=https://npm.pkg.github.com`.
+- Do not commit npm tokens, GitHub tokens, Azure DevOps PATs, `.env` files, or tokenized `.npmrc` entries.
+- Do not add a committed registry override for `@rxreyn3`; consumers should be able to run plain `npm install @rxreyn3/pi-azure-devops` from the public npm registry.
 - Keep token-bearing npm authentication in user-level config, a temporary shell environment, or another environment-specific secret store outside the repo.
 - Do not paste tokens into logs, docs examples, package metadata, or issue text.
 - Existing signed Azure DevOps artifact URL redaction and PAT-handling rules remain unchanged.
 
 ## Manual publication steps
 
-1. Create the GitHub repository manually: `rxreyn3/pi-azure-devops`.
-2. Add the repository remote and push manually from a local shell. Do not bake credentials into repo files or remote URLs committed to the repo.
-3. Configure GitHub Packages auth outside the repository. For local CLI npm use, GitHub Packages requires a classic GitHub PAT. Use `read:packages` for installs and `write:packages` for publishing.
+1. Ensure the GitHub repository exists and is pushed: `rxreyn3/pi-azure-devops`.
+2. Authenticate to npm outside the repository:
+
+   ```bash
+   npm login
+   npm whoami --registry=https://registry.npmjs.org
+   ```
+
+3. Verify package name/version availability before publishing:
+
+   ```bash
+   npm view @rxreyn3/pi-azure-devops@0.1.1 version --registry=https://registry.npmjs.org
+   ```
+
+   If npm returns a version, bump to the next patch or prerelease before publishing. npm package versions cannot be reused once published.
+
 4. Verify the package locally:
 
    ```bash
@@ -34,6 +47,7 @@ This runbook is manual-first. It prepares and validates `@rxreyn3/pi-azure-devop
 
    - `dist/cli/index.js`
    - `dist/extension/index.js`
+   - `dist/fixtures/build-get.json`
    - `skills/azure-devops/SKILL.md`
    - `prompts/ado-doctor.md`
    - `prompts/ado-status.md`
@@ -44,7 +58,7 @@ This runbook is manual-first. It prepares and validates `@rxreyn3/pi-azure-devop
    - `LICENSE`
    - `CHANGELOG.md`
 
-   Expected exclusions include `src/`, `test/`, `spikes/`, `.crush/`, `.vscode/`, local scratch files, and any secret-bearing config.
+   Expected exclusions include `src/`, `test/`, `spikes/`, `.crush/`, `.vscode/`, local scratch files, committed `.npmrc`, and any secret-bearing config.
 
 6. Create the tarball and install it into a temporary project outside this repo:
 
@@ -53,7 +67,7 @@ This runbook is manual-first. It prepares and validates `@rxreyn3/pi-azure-devop
    mkdir -p /tmp/pi-azure-devops-install-smoke
    cd /tmp/pi-azure-devops-install-smoke
    npm init -y
-   npm install /path/to/rxreyn3-pi-azure-devops-0.1.0.tgz
+   npm install /path/to/rxreyn3-pi-azure-devops-0.1.1.tgz
    ./node_modules/.bin/pi-ado doctor --mock --json
    ```
 
@@ -69,15 +83,9 @@ This runbook is manual-first. It prepares and validates `@rxreyn3/pi-azure-devop
    npm publish
    ```
 
-   If `@rxreyn3/pi-azure-devops@0.1.0` already exists in GitHub Packages, bump to the next patch or prerelease before publishing. npm package versions cannot be reused once published.
+   `publishConfig.access` is set to `public` so the scoped package publishes as public on npm without requiring `--access public`.
 
-9. In OMP or another consumer project, add the scope mapping if it is not already present:
-
-   ```ini
-   @rxreyn3:registry=https://npm.pkg.github.com
-   ```
-
-   Then install and smoke-test:
+9. In OMP or another consumer project, install and smoke-test from the public npm registry:
 
    ```bash
    npm install @rxreyn3/pi-azure-devops
@@ -90,4 +98,4 @@ This runbook is manual-first. It prepares and validates `@rxreyn3/pi-azure-devop
     - Artifact download preview without `--confirm` first.
     - Local artifact download/extract only after reviewing preview and supplying the explicit confirmation flag.
 
-Do not proceed to Phase 8 remote mutation work until package tarball installation and OMP/consumer discovery have been validated.
+Do not proceed to Phase 8 remote mutation work until package tarball installation and OMP/consumer discovery have been validated from the public npm package.

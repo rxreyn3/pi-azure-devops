@@ -60,7 +60,7 @@ Delivered scope:
 - Docs and prompts state that remote mutation is not implemented.
 - Tests assert the read-only / local-write tool partition and that
   remote-mutation tool names remain absent.
-- Package metadata is prepared for manual-first GitHub Packages publication as
+- Package metadata is prepared for manual-first public npm publication as
   `@rxreyn3/pi-azure-devops`, with built `dist/`, skills, prompts, docs,
   examples, README, LICENSE, and CHANGELOG included by the package allow-list.
   Publication and consuming-project installation remain manual external steps.
@@ -78,7 +78,7 @@ User-selected order:
 
 1. Finish read-only UX (display-name selectors). [delivered Phase 7A]
 2. Local artifact download / write / extract. [delivered Phase 7B]
-3. GitHub Packages publication and OMP install testing. [delivered Phase 7C]
+3. Public npm publication and OMP install testing. [delivered Phase 7C]
 4. Remote mutation with fail-closed gates. [next: Phase 8]
 
 Rationale: surface-area and blast radius grow monotonically. Read-only name
@@ -233,22 +233,22 @@ writes only. NO remote Azure DevOps mutations.
 
 ---
 
-## Phase 7C — GitHub Packages publication and OMP install testing
+## Phase 7C — Public npm publication and OMP install testing
 
-Purpose: make the package installable from the user's GitHub namespace and
-prove OMP/consumer installation before remote Azure DevOps mutation work.
+Purpose: make the package installable from the public npm registry and prove
+OMP/consumer installation before remote Azure DevOps mutation work.
 
 ### Requirements
 
 - GitHub namespace: `rxreyn3`.
 - Package name: `@rxreyn3/pi-azure-devops`.
-- Publish target: GitHub Packages npm registry (`https://npm.pkg.github.com`).
-- Release automation is manual-first; no GitHub Actions publish job is added
-  in this phase.
+- Publish target: public npm registry (`https://registry.npmjs.org`).
+- Release automation is manual-first; no automated publish job is added in
+  this phase.
 - Do not implement remote Azure DevOps mutation commands, tools, prompts,
   transports, or behavior.
-- Do not commit GitHub/npm/Azure DevOps tokens, `.env` files, or tokenized
-  `.npmrc` entries.
+- Do not commit GitHub/npm/Azure DevOps tokens, `.env` files, tokenized
+  `.npmrc` entries, or scoped registry overrides.
 - Keep `dist/` ignored in git, but generate it during packing and verify the
   tarball contains built CLI/extension files.
 - Package contents must include built `dist/`, `skills/`, `prompts/`, `docs/`,
@@ -256,8 +256,7 @@ prove OMP/consumer installation before remote Azure DevOps mutation work.
 
 ### Manual-first publication and install flow
 
-1. Prepare package metadata, scope registry mapping, lifecycle scripts, and
-   package allow-list locally.
+1. Prepare package metadata, lifecycle scripts, and package allow-list locally.
 2. Run `npm test`, `npm run typecheck`, and `npm run build`.
 3. Run `npm pack --dry-run` and inspect included/excluded files.
 4. Run `npm pack`, install the generated tarball into a temporary project
@@ -265,14 +264,14 @@ prove OMP/consumer installation before remote Azure DevOps mutation work.
 5. Confirm installed `package.json` still exposes `pi.extensions`, `pi.skills`,
    and `pi.prompts` metadata pointing at installed files.
 6. Only after local tarball install passes, manually create/push the GitHub
-   repository, configure GitHub Packages auth outside the repo, publish with
-   `npm publish`, and install/test in OMP or another consumer project.
+   repository, authenticate to npm outside the repo, publish with `npm publish`,
+   and install/test in OMP or another consumer project.
 
 ### Critical files (Phase 7C)
 
 - `package.json`
 - `package-lock.json`
-- `.npmrc`
+- `package.json` publish configuration
 - `.gitignore`
 - `README.md`
 - `docs/publication.md`
@@ -367,7 +366,7 @@ read-only selector UX and local-write safety are settled.
   selector-based code path.
 - Package distribution must be smoke-tested from an installable tarball before
   Phase 8 begins.
-- No committed GitHub, npm, Azure DevOps, or package registry tokens.
+- No committed GitHub, npm, Azure DevOps, package registry tokens, or scoped registry overrides.
 - Mutation surfaces are fail-closed in non-interactive environments.
 
 ## Non-goals (for any single implementation pass unless explicitly expanded)
@@ -377,7 +376,7 @@ read-only selector UX and local-write safety are settled.
 - Implementing mutating prompt templates.
 - Inferring or hardcoding any Azure DevOps organization, project, pipeline,
   build, run, job, task, log, or token values.
-- Committing GitHub/npm/Azure DevOps tokens or tokenized registry config.
+- Committing GitHub/npm/Azure DevOps tokens, tokenized registry config, or scoped registry overrides.
 
 ## Verification policy for plan-only passes
 

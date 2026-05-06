@@ -1,6 +1,6 @@
 {
   "name": "@rxreyn3/pi-azure-devops",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Generic REST-first Azure DevOps package skeleton for Pi",
   "license": "MIT",
   "author": "rxreyn3",
@@ -13,7 +13,7 @@
   },
   "homepage": "https://github.com/rxreyn3/pi-azure-devops#readme",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "files": [
     "dist/",
