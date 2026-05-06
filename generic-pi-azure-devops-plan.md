@@ -8,7 +8,7 @@ This document is planning only. It does not authorize source, prompt, docs,
 package manifest, or test changes. Implementation of any phase below requires
 an explicit follow-up session.
 
-## 1. Current state (delivered through Phase 7B)
+## 1. Current state (delivered through Phase 7C)
 
 `pi-azure-devops` is a generic, REST-first Azure DevOps integration package
 for Pi. It is not a repo-specific ShotGrid helper.
@@ -60,6 +60,10 @@ Delivered scope:
 - Docs and prompts state that remote mutation is not implemented.
 - Tests assert the read-only / local-write tool partition and that
   remote-mutation tool names remain absent.
+- Package metadata is prepared for manual-first GitHub Packages publication as
+  `@rxreyn3/pi-azure-devops`, with built `dist/`, skills, prompts, docs,
+  examples, README, LICENSE, and CHANGELOG included by the package allow-list.
+  Publication and consuming-project installation remain manual external steps.
 
 ## 2. Known remaining work
 
@@ -74,10 +78,12 @@ User-selected order:
 
 1. Finish read-only UX (display-name selectors). [delivered Phase 7A]
 2. Local artifact download / write / extract. [delivered Phase 7B]
-3. Remote mutation with fail-closed gates. [next: Phase 8]
+3. GitHub Packages publication and OMP install testing. [delivered Phase 7C]
+4. Remote mutation with fail-closed gates. [next: Phase 8]
 
 Rationale: surface-area and blast radius grow monotonically. Read-only name
 lookup adds zero side effects, local download adds filesystem writes only,
+package publication validates installability and manual live testing before
 remote mutation adds side effects against Azure DevOps. Each phase must be
 stable before the next begins.
 
@@ -227,6 +233,63 @@ writes only. NO remote Azure DevOps mutations.
 
 ---
 
+## Phase 7C — GitHub Packages publication and OMP install testing
+
+Purpose: make the package installable from the user's GitHub namespace and
+prove OMP/consumer installation before remote Azure DevOps mutation work.
+
+### Requirements
+
+- GitHub namespace: `rxreyn3`.
+- Package name: `@rxreyn3/pi-azure-devops`.
+- Publish target: GitHub Packages npm registry (`https://npm.pkg.github.com`).
+- Release automation is manual-first; no GitHub Actions publish job is added
+  in this phase.
+- Do not implement remote Azure DevOps mutation commands, tools, prompts,
+  transports, or behavior.
+- Do not commit GitHub/npm/Azure DevOps tokens, `.env` files, or tokenized
+  `.npmrc` entries.
+- Keep `dist/` ignored in git, but generate it during packing and verify the
+  tarball contains built CLI/extension files.
+- Package contents must include built `dist/`, `skills/`, `prompts/`, `docs/`,
+  `examples/`, `README.md`, `LICENSE`, and `CHANGELOG.md`.
+
+### Manual-first publication and install flow
+
+1. Prepare package metadata, scope registry mapping, lifecycle scripts, and
+   package allow-list locally.
+2. Run `npm test`, `npm run typecheck`, and `npm run build`.
+3. Run `npm pack --dry-run` and inspect included/excluded files.
+4. Run `npm pack`, install the generated tarball into a temporary project
+   outside this repo, and smoke-test `node_modules/.bin/pi-ado doctor --mock --json`.
+5. Confirm installed `package.json` still exposes `pi.extensions`, `pi.skills`,
+   and `pi.prompts` metadata pointing at installed files.
+6. Only after local tarball install passes, manually create/push the GitHub
+   repository, configure GitHub Packages auth outside the repo, publish with
+   `npm publish`, and install/test in OMP or another consumer project.
+
+### Critical files (Phase 7C)
+
+- `package.json`
+- `package-lock.json`
+- `.npmrc`
+- `.gitignore`
+- `README.md`
+- `docs/publication.md`
+- `CHANGELOG.md`
+- `generic-pi-azure-devops-plan.md`
+
+### Verification required
+
+- `npm test`
+- `npm run typecheck`
+- `npm run build`
+- `npm pack --dry-run`, confirming required runtime files are included and
+  `src/`, `test/`, `spikes/`, local scratch files, and secret-bearing files are excluded.
+- `npm pack` followed by a temporary-project tarball install and mock CLI smoke test.
+
+---
+
 ## Phase 8 — Remote mutation with fail-closed gates
 
 Purpose: introduce side-effectful Azure DevOps operations only after the
@@ -302,16 +365,19 @@ read-only selector UX and local-write safety are settled.
   first, so tests exercise the surface without network.
 - Tests must distinguish no-match, ambiguity, and unambiguous match for any
   selector-based code path.
+- Package distribution must be smoke-tested from an installable tarball before
+  Phase 8 begins.
+- No committed GitHub, npm, Azure DevOps, or package registry tokens.
 - Mutation surfaces are fail-closed in non-interactive environments.
 
 ## Non-goals (for any single implementation pass unless explicitly expanded)
 
-- Implementing timeline display-name selectors.
-- Implementing artifact download/write/extract.
-- Implementing queue/cancel/rerun/preview mutation tools.
+- Implementing queue/cancel/rerun/preview mutation commands, tools, prompts,
+  transports, or behavior during Phase 7C packaging work.
 - Implementing mutating prompt templates.
 - Inferring or hardcoding any Azure DevOps organization, project, pipeline,
   build, run, job, task, log, or token values.
+- Committing GitHub/npm/Azure DevOps tokens or tokenized registry config.
 
 ## Verification policy for plan-only passes
 

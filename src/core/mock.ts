@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 interface JsonInlineResolution {
   kind: "json";
@@ -176,6 +177,20 @@ function resolveFixture(parsed: URL): FixtureResolution | undefined {
   return undefined;
 }
 
+async function readFixtureFile(repoRoot: string, file: string, encoding: BufferEncoding): Promise<string> {
+  const repoFixturePath = path.join(repoRoot, "test", "fixtures", file);
+  try {
+    return await readFile(repoFixturePath, encoding);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  const packagedFixturePath = fileURLToPath(new URL(`../fixtures/${file}`, import.meta.url));
+  return readFile(packagedFixturePath, encoding);
+}
+
 export function createFixtureFetch(repoRoot = process.cwd()): typeof fetch {
   return async (input: string | URL | Request): Promise<Response> => {
     const url =
@@ -205,8 +220,7 @@ export function createFixtureFetch(repoRoot = process.cwd()): typeof fetch {
     }
 
     if (fixture.kind === "jsonFile") {
-      const fullPath = path.join(repoRoot, "test", "fixtures", fixture.file);
-      const body = await readFile(fullPath, "utf8");
+      const body = await readFixtureFile(repoRoot, fixture.file, "utf8");
       return new Response(body, {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -214,8 +228,7 @@ export function createFixtureFetch(repoRoot = process.cwd()): typeof fetch {
     }
 
     if (fixture.kind === "textFile") {
-      const fullPath = path.join(repoRoot, "test", "fixtures", fixture.file);
-      const body = await readFile(fullPath, "utf8");
+      const body = await readFixtureFile(repoRoot, fixture.file, "utf8");
       return new Response(body, {
         status: 200,
         headers: { "content-type": fixture.contentType },
@@ -223,8 +236,7 @@ export function createFixtureFetch(repoRoot = process.cwd()): typeof fetch {
     }
 
     // zipBase64File: decode base64 file into binary bytes for the body.
-    const fullPath = path.join(repoRoot, "test", "fixtures", fixture.file);
-    const base64 = (await readFile(fullPath, "utf8")).trim();
+    const base64 = (await readFixtureFile(repoRoot, fixture.file, "utf8")).trim();
     const bytes = Buffer.from(base64, "base64");
     return new Response(bytes, {
       status: 200,

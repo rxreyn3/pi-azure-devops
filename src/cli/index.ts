@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -499,9 +500,19 @@ export async function runCli(argv: string[], context: Partial<CliContext> = {}):
   }
 }
 
+function resolveEntrypointPath(value: string): string {
+  const absolutePath = path.resolve(value);
+  try {
+    return realpathSync(absolutePath);
+  } catch {
+    return absolutePath;
+  }
+}
+
 const invokedPath = process.argv[1];
 if (invokedPath) {
-  const isEntrypoint = fileURLToPath(import.meta.url) === path.resolve(invokedPath);
+  const isEntrypoint =
+    resolveEntrypointPath(fileURLToPath(import.meta.url)) === resolveEntrypointPath(invokedPath);
   if (isEntrypoint) {
     runCli(process.argv.slice(2)).then((code) => {
       process.exitCode = code;

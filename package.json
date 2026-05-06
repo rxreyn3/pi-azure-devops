@@ -1,17 +1,41 @@
 {
-  "name": "pi-azure-devops",
+  "name": "@rxreyn3/pi-azure-devops",
   "version": "0.1.0",
-  "private": true,
   "description": "Generic REST-first Azure DevOps package skeleton for Pi",
+  "license": "MIT",
+  "author": "rxreyn3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rxreyn3/pi-azure-devops.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rxreyn3/pi-azure-devops/issues"
+  },
+  "homepage": "https://github.com/rxreyn3/pi-azure-devops#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "dist/",
+    "skills/",
+    "prompts/",
+    "docs/",
+    "examples/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "type": "module",
   "bin": {
     "pi-ado": "dist/cli/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('test/fixtures','dist/fixtures',{recursive:true})\"",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "node --import tsx --test test/**/*.test.ts",
-    "spike:rest": "tsx spikes/ado-rest-spike.ts"
+    "spike:rest": "tsx spikes/ado-rest-spike.ts",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm test && npm run typecheck"
   },
   "pi": {
     "extensions": [
