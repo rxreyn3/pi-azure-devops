@@ -12,3 +12,4 @@ export * from "./parsing.js";
 export * from "./redact.js";
 export * from "./rest.js";
 export * from "./scope.js";
+export * from "./operations/index.js";

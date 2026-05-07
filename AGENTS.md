@@ -38,6 +38,35 @@ Script details:
 - `npm run build` runs `tsc -p tsconfig.json`; this builds `src/**/*.ts` to `dist/`.
 - No lint script was observed.
 
+## Local OMP plugin testing
+
+To test this checkout inside OMP instead of the published package, build first because `package.json` points OMP at `./dist/extension/index.js`:
+
+```bash
+npm run build
+```
+
+Then replace the installed npm plugin with a dependency entry plus a symlink to the current checkout. Use dynamic paths; do not hardcode a user-specific path. The `bun add` step registers the package in OMP's plugin package manifest, and the final `omp plugin link` step makes `node_modules` point at this checkout:
+
+```bash
+repo_path="$(pwd)"
+plugin_dir="${OMP_PLUGINS_DIR:-$HOME/.omp/plugins}"
+omp plugin uninstall @rxreyn3/pi-azure-devops || true
+(cd "$plugin_dir" && bun add "$repo_path")
+rm -rf "$plugin_dir/node_modules/@rxreyn3/pi-azure-devops"
+omp plugin link "$repo_path"
+readlink "$plugin_dir/node_modules/@rxreyn3/pi-azure-devops"
+omp plugin list --json
+omp plugin doctor --json
+```
+
+Restart OMP after linking. For later local code changes, rerun `npm run build` and restart OMP so the regenerated `dist/` extension is loaded. To return to the published package:
+
+```bash
+omp plugin uninstall @rxreyn3/pi-azure-devops
+omp plugin install @rxreyn3/pi-azure-devops
+```
+
 ## Code organization and flow
 
 ```text

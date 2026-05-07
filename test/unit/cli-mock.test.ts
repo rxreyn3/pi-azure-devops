@@ -278,14 +278,16 @@ test("pi-ado artifacts download --mock without --confirm returns preview and wri
   assert.equal(stderrCapture.getOutput(), "");
 
   const parsed = JSON.parse(stdoutCapture.getOutput()) as {
-    status: string;
-    requiresConfirmation?: boolean;
-    wouldWrite?: string[];
-    resolvedArtifactKind?: string;
+    outcome: {
+      status: string;
+      requiresConfirmation?: boolean;
+      wouldWrite?: string[];
+      resolvedArtifactKind?: string;
+    };
   };
-  assert.equal(parsed.status, "preview");
-  assert.equal(parsed.requiresConfirmation, true);
-  assert.equal(parsed.resolvedArtifactKind, "build");
+  assert.equal(parsed.outcome.status, "preview");
+  assert.equal(parsed.outcome.requiresConfirmation, true);
+  assert.equal(parsed.outcome.resolvedArtifactKind, "build");
   assert.equal(existsSync(path.join(cwd, "out", "logs.zip")), false);
 });
 
@@ -322,19 +324,21 @@ test("pi-ado artifacts download --mock --confirm writes ZIP for build artifact",
   assert.equal(stderrCapture.getOutput(), "");
 
   const parsed = JSON.parse(stdoutCapture.getOutput()) as {
-    status: string;
-    resolvedArtifactKind?: string;
-    bytesDownloaded?: number;
-    writtenFiles?: string[];
+    outcome: {
+      status: string;
+      resolvedArtifactKind?: string;
+      bytesDownloaded?: number;
+      writtenFiles?: string[];
+    };
   };
-  assert.equal(parsed.status, "downloaded");
-  assert.equal(parsed.resolvedArtifactKind, "build");
-  assert.equal((parsed.bytesDownloaded ?? 0) > 0, true);
-  assert.equal(parsed.writtenFiles?.length, 1);
+  assert.equal(parsed.outcome.status, "downloaded");
+  assert.equal(parsed.outcome.resolvedArtifactKind, "build");
+  assert.equal((parsed.outcome.bytesDownloaded ?? 0) > 0, true);
+  assert.equal(parsed.outcome.writtenFiles?.length, 1);
 
   const zipPath = path.join(cwd, "out", "drop.zip");
   const zipBytes = await readFile(zipPath);
-  assert.equal(zipBytes.byteLength, parsed.bytesDownloaded);
+  assert.equal(zipBytes.byteLength, parsed.outcome.bytesDownloaded);
 
   // Mock-signature pattern must not appear in CLI output.
   assert.equal(stdoutCapture.getOutput().includes("mock-build-zip-signature"), false);
@@ -373,15 +377,17 @@ test("pi-ado artifacts download --mock --confirm with --artifact-kind pipeline w
   assert.equal(stderrCapture.getOutput(), "");
 
   const parsed = JSON.parse(stdoutCapture.getOutput()) as {
-    status: string;
-    resolvedArtifactKind?: string;
-    pipelineId?: number;
-    runId?: number;
+    outcome: {
+      status: string;
+      resolvedArtifactKind?: string;
+      pipelineId?: number;
+      runId?: number;
+    };
   };
-  assert.equal(parsed.status, "downloaded");
-  assert.equal(parsed.resolvedArtifactKind, "pipeline");
-  assert.equal(parsed.pipelineId, 301);
-  assert.equal(parsed.runId, 101);
+  assert.equal(parsed.outcome.status, "downloaded");
+  assert.equal(parsed.outcome.resolvedArtifactKind, "pipeline");
+  assert.equal(parsed.outcome.pipelineId, 301);
+  assert.equal(parsed.outcome.runId, 101);
 
   const zipPath = path.join(cwd, "out", "pipeline-only.zip");
   assert.equal(existsSync(zipPath), true);
@@ -423,10 +429,12 @@ test("pi-ado artifacts download --mock --confirm --extract writes extracted file
   assert.equal(stderrCapture.getOutput(), "");
 
   const parsed = JSON.parse(stdoutCapture.getOutput()) as {
-    status: string;
-    writtenFiles?: string[];
+    outcome: {
+      status: string;
+      writtenFiles?: string[];
+    };
   };
-  assert.equal(parsed.status, "extracted");
+  assert.equal(parsed.outcome.status, "extracted");
 
   const readme = await readFile(path.join(cwd, "out", "drop", "drop", "README.txt"), "utf8");
   assert.equal(readme, "build artifact drop\n");
@@ -463,11 +471,13 @@ test("pi-ado artifacts download --mock auto returns ambiguity preview without wr
   assert.equal(stderrCapture.getOutput(), "");
 
   const parsed = JSON.parse(stdoutCapture.getOutput()) as {
-    status: string;
-    resolution?: { status: string };
+    outcome: {
+      status: string;
+      resolution?: { status: string };
+    };
   };
-  assert.equal(parsed.status, "preview");
-  assert.equal(parsed.resolution?.status, "ambiguous");
+  assert.equal(parsed.outcome.status, "preview");
+  assert.equal(parsed.outcome.resolution?.status, "ambiguous");
   assert.equal(existsSync(path.join(cwd, "out", "drop.zip")), false);
 });
 

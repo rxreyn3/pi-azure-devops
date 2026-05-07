@@ -9,15 +9,15 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 import azureDevopsExtension from "../../src/extension/index.js";
 import {
-  runDiagnoseFailureTool,
-  runDoctorTool,
-  runDownloadArtifactTool,
-  runGetLogsTool,
-  runGetStatusTool,
-  runListArtifactsTool,
-  runListBuildsTool,
-  runListPipelinesTool,
-} from "../../src/extension/tools/handlers.js";
+  runDiagnoseFailureOperation,
+  runDoctorOperation,
+  runDownloadArtifactOperation,
+  runGetLogsOperation,
+  runGetStatusOperation,
+  runListArtifactsOperation,
+  runListBuildsOperation,
+  runListPipelinesOperation,
+} from "../../src/core/operations/runners.js";
 import {
   AZURE_DEVOPS_TOOL_NAMES,
   LOCAL_WRITE_AZURE_DEVOPS_TOOL_NAMES,
@@ -25,7 +25,7 @@ import {
 } from "../../src/extension/tools/index.js";
 
 test("azure_devops_doctor mock mode resolves without credentials", async () => {
-  const result = await runDoctorTool({ mock: true }, { cwd: process.cwd(), env: {} });
+  const result = await runDoctorOperation({ mock: true }, { cwd: process.cwd(), env: {} });
 
   assert.equal(result.details.mode, "mock");
   assert.equal(result.details.auth.tokenFound, false);
@@ -34,7 +34,7 @@ test("azure_devops_doctor mock mode resolves without credentials", async () => {
 });
 
 test("azure_devops_get_status mock mode returns timeline and selected log mapping", async () => {
-  const result = await runGetStatusTool(
+  const result = await runGetStatusOperation(
     {
       mock: true,
       buildId: 101,
@@ -51,7 +51,7 @@ test("azure_devops_get_status mock mode returns timeline and selected log mappin
 });
 
 test("azure_devops_get_logs mock mode returns bounded content and selected log metadata", async () => {
-  const result = await runGetLogsTool(
+  const result = await runGetLogsOperation(
     {
       mock: true,
       buildId: 101,
@@ -69,7 +69,7 @@ test("azure_devops_get_logs mock mode returns bounded content and selected log m
 });
 
 test("azure_devops_list_artifacts mock mode redacts signed URLs and stays metadata-only", async () => {
-  const result = await runListArtifactsTool(
+  const result = await runListArtifactsOperation(
     {
       mock: true,
       buildId: 101,
@@ -84,7 +84,7 @@ test("azure_devops_list_artifacts mock mode redacts signed URLs and stays metada
 });
 
 test("azure_devops_diagnose_failure mock mode returns bundled evidence and redacts signed URLs", async () => {
-  const result = await runDiagnoseFailureTool(
+  const result = await runDiagnoseFailureOperation(
     {
       mock: true,
       buildId: 101,
@@ -105,7 +105,7 @@ test("azure_devops_diagnose_failure mock mode returns bundled evidence and redac
 });
 
 test("azure_devops_get_status accepts stageName/jobName/taskName and exposes lookup metadata", async () => {
-  const result = await runGetStatusTool(
+  const result = await runGetStatusOperation(
     {
       mock: true,
       buildId: 202,
@@ -125,7 +125,7 @@ test("azure_devops_get_status accepts stageName/jobName/taskName and exposes loo
 });
 
 test("azure_devops_get_logs returns ambiguous selector candidates and omits content", async () => {
-  const result = await runGetLogsTool(
+  const result = await runGetLogsOperation(
     {
       mock: true,
       buildId: 202,
@@ -144,7 +144,7 @@ test("azure_devops_get_logs returns ambiguous selector candidates and omits cont
 });
 
 test("azure_devops_diagnose_failure accepts taskName and matched evidence appears in details", async () => {
-  const result = await runDiagnoseFailureTool(
+  const result = await runDiagnoseFailureOperation(
     {
       mock: true,
       buildId: 202,
@@ -160,7 +160,7 @@ test("azure_devops_diagnose_failure accepts taskName and matched evidence appear
 });
 
 test("azure_devops_list_pipelines mock mode returns read-only summaries and clamps top", async () => {
-  const result = await runListPipelinesTool({ mock: true, top: 500 }, { cwd: process.cwd(), env: {} });
+  const result = await runListPipelinesOperation({ mock: true, top: 500 }, { cwd: process.cwd(), env: {} });
 
   assert.equal(result.details.mode, "mock");
   assert.equal(result.details.topApplied, 50);
@@ -168,7 +168,7 @@ test("azure_devops_list_pipelines mock mode returns read-only summaries and clam
 });
 
 test("azure_devops_list_builds mock mode returns read-only summaries and clamps top", async () => {
-  const result = await runListBuildsTool({ mock: true, top: 500 }, { cwd: process.cwd(), env: {} });
+  const result = await runListBuildsOperation({ mock: true, top: 500 }, { cwd: process.cwd(), env: {} });
 
   assert.equal(result.details.mode, "mock");
   assert.equal(result.details.topApplied, 50);
@@ -216,7 +216,7 @@ async function makeTempDir(prefix: string): Promise<string> {
 
 test("azure_devops_download_artifact mock preview without confirm writes nothing and redacts signed URLs", async () => {
   const cwd = await makeTempDir("ext-download-preview-");
-  const result = await runDownloadArtifactTool(
+  const result = await runDownloadArtifactOperation(
     {
       mock: true,
       buildId: 101,
@@ -242,7 +242,7 @@ test("azure_devops_download_artifact mock preview without confirm writes nothing
 
 test("azure_devops_download_artifact mock confirm writes build artifact ZIP under cwd", async () => {
   const cwd = await makeTempDir("ext-download-build-");
-  const result = await runDownloadArtifactTool(
+  const result = await runDownloadArtifactOperation(
     {
       mock: true,
       buildId: 101,
@@ -267,7 +267,7 @@ test("azure_devops_download_artifact mock confirm writes build artifact ZIP unde
 
 test("azure_devops_download_artifact mock confirm writes pipeline artifact ZIP via signed-content flow", async () => {
   const cwd = await makeTempDir("ext-download-pipeline-");
-  const result = await runDownloadArtifactTool(
+  const result = await runDownloadArtifactOperation(
     {
       mock: true,
       buildId: 101,
@@ -293,7 +293,7 @@ test("azure_devops_download_artifact mock confirm writes pipeline artifact ZIP v
 
 test("azure_devops_download_artifact mock without confirm performs no writes even when artifactKind is pipeline", async () => {
   const cwd = await makeTempDir("ext-download-pipeline-preview-");
-  const result = await runDownloadArtifactTool(
+  const result = await runDownloadArtifactOperation(
     {
       mock: true,
       buildId: 101,
